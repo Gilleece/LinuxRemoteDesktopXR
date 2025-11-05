@@ -1,3 +1,0 @@
-/home/sean/DEV/LinuxRemoteDesktopXR/build/CMakeFiles/RLDXR_Server.dir
-/home/sean/DEV/LinuxRemoteDesktopXR/build/CMakeFiles/edit_cache.dir
-/home/sean/DEV/LinuxRemoteDesktopXR/build/CMakeFiles/rebuild_cache.dir
