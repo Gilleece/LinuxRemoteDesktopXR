@@ -15,9 +15,10 @@ public:
     Encoder();
     ~Encoder();
 
-    bool init(int width, int height, int framerate_num, int framerate_den);
+    bool init(int width, int height, int framerate);
     AVCodecContext* get_codec_context();
     bool encode(AVFrame* sw_frame, Network& network);
+    AVPacket* get_extradata_packet();
 
 private:
     AVCodecContext* codecContext = nullptr;

@@ -1,7 +1,7 @@
 #include "Encoder.h"
 #include <iostream>
-#include <X11/Xlib.h>
-#include <libavutil/opt.h>
+#include <libavutil/error.h> // For av_strerror
+#include <libavutil/opt.h> // For av_opt_set
 
 extern "C" {
 #include <libavutil/hwcontext_vaapi.h>
@@ -15,119 +15,156 @@ Encoder::~Encoder() {
     if (hw_device_ctx) av_buffer_unref(&hw_device_ctx);
 }
 
-bool Encoder::init(int width, int height, int framerate_num, int framerate_den) {
-    const AVCodec* codec = avcodec_find_encoder_by_name("h264_vaapi");
+bool Encoder::init(int width, int height, int framerate) {
+    // Find the VAAPI H.264 encoder
+    const AVCodec *codec = avcodec_find_encoder_by_name("h264_vaapi");
     if (!codec) {
-        std::cerr << "Could not find h264_vaapi encoder." << std::endl;
+        std::cerr << "h264_vaapi encoder not found" << std::endl;
         return false;
     }
 
+    // Create codec context
     codecContext = avcodec_alloc_context3(codec);
     if (!codecContext) {
-        std::cerr << "Could not allocate codec context." << std::endl;
+        std::cerr << "Could not allocate codec context" << std::endl;
         return false;
     }
 
-    // Create VA-API hardware device context
-    int ret = av_hwdevice_ctx_create(&hw_device_ctx, AV_HWDEVICE_TYPE_VAAPI, NULL, NULL, 0);
-    if (ret < 0) {
-        std::cerr << "Failed to create VA-API hardware device context." << std::endl;
-        return false;
-    }
-
-    // Create hardware frames context
-    hw_frames_ctx = av_hwframe_ctx_alloc(hw_device_ctx);
-    if (!hw_frames_ctx) {
-        std::cerr << "Failed to create VA-API hardware frames context." << std::endl;
-        return false;
-    }
-
-    AVHWFramesContext* frames_ctx = (AVHWFramesContext*)(hw_frames_ctx->data);
-    frames_ctx->format = AV_PIX_FMT_VAAPI;
-    frames_ctx->sw_format = AV_PIX_FMT_NV12;
-    frames_ctx->width = width;
-    frames_ctx->height = height;
-    frames_ctx->initial_pool_size = 20;
-
-    if (av_hwframe_ctx_init(hw_frames_ctx) < 0) {
-        std::cerr << "Failed to initialize VA-API hardware frames context." << std::endl;
-        return false;
-    }
-
-    codecContext->hw_frames_ctx = av_buffer_ref(hw_frames_ctx);
-    if (!codecContext->hw_frames_ctx) {
-        std::cerr << "Failed to set hardware frames context." << std::endl;
-        return false;
-    }
-
+    // Set codec parameters
     codecContext->width = width;
     codecContext->height = height;
+    codecContext->time_base = {1, framerate};
+    codecContext->framerate = {framerate, 1};
+    codecContext->gop_size = 10;
+    codecContext->max_b_frames = 0;
     codecContext->pix_fmt = AV_PIX_FMT_VAAPI;
-    codecContext->time_base = {framerate_den, framerate_num};
-    codecContext->framerate = {framerate_num, framerate_den};
-    codecContext->gop_size = 30;
-    codecContext->profile = FF_PROFILE_H264_CONSTRAINED_BASELINE;
-    codecContext->global_quality = 25; // CQP value
 
-    if (avcodec_open2(codecContext, codec, nullptr) < 0) {
-        std::cerr << "Could not open codec." << std::endl;
+    // Set quality for CQP mode. This is the most direct way.
+    codecContext->global_quality = 25;
+    // Ensure bitrate is 0 to signal quality-based RC, not bitrate-based.
+    codecContext->bit_rate = 0;
+    codecContext->rc_max_rate = 0;
+    codecContext->rc_min_rate = 0;
+    codecContext->rc_buffer_size = 0;
+
+    // Profile
+    codecContext->profile = FF_PROFILE_H264_CONSTRAINED_BASELINE;
+    
+    // Create hardware device context
+    if (av_hwdevice_ctx_create(&hw_device_ctx, AV_HWDEVICE_TYPE_VAAPI, "/dev/dri/renderD128", NULL, 0) < 0) {
+        std::cerr << "Failed to create VAAPI hardware device context." << std::endl;
+        return false;
+    }
+    
+    // Create hardware frames context
+    AVBufferRef *hw_frames_ref = av_hwframe_ctx_alloc(hw_device_ctx);
+    if (!hw_frames_ref) {
+        std::cerr << "Failed to create VAAPI hardware frames context." << std::endl;
+        return false;
+    }
+    AVHWFramesContext *frames_ctx = (AVHWFramesContext *)(hw_frames_ref->data);
+    frames_ctx->format    = AV_PIX_FMT_VAAPI;
+    frames_ctx->sw_format = AV_PIX_FMT_NV12;
+    frames_ctx->width     = codecContext->width;
+    frames_ctx->height    = codecContext->height;
+    frames_ctx->initial_pool_size = 20;
+    if (av_hwframe_ctx_init(hw_frames_ref) < 0) {
+        std::cerr << "Failed to initialize VAAPI hardware frames context." << std::endl;
+        av_buffer_unref(&hw_frames_ref);
+        return false;
+    }
+    codecContext->hw_frames_ctx = av_buffer_ref(hw_frames_ref);
+    av_buffer_unref(&hw_frames_ref);
+
+    // Open codec
+    if (avcodec_open2(codecContext, codec, NULL) < 0) {
+        std::cerr << "Could not open codec" << std::endl;
         return false;
     }
 
-    std::cout << "h264_vaapi encoder initialized successfully." << std::endl;
     return true;
-}
-
-AVCodecContext* Encoder::get_codec_context() {
+}AVCodecContext* Encoder::get_codec_context() {
     return codecContext;
 }
 
+AVPacket* Encoder::get_extradata_packet() {
+    if (!codecContext || !codecContext->extradata) {
+        return nullptr;
+    }
+    AVPacket* pkt = av_packet_alloc();
+    if (!pkt) {
+        return nullptr;
+    }
+    pkt->size = codecContext->extradata_size;
+    pkt->data = (uint8_t*)av_malloc(pkt->size);
+    if (!pkt->data) {
+        av_packet_free(&pkt);
+        return nullptr;
+    }
+    memcpy(pkt->data, codecContext->extradata, pkt->size);
+    return pkt;
+}
+
 bool Encoder::encode(AVFrame* sw_frame, Network& network) {
+    int ret;
+
     if (sw_frame) {
-        AVFrame* hw_frame = av_frame_alloc();
+        // It's a regular frame, so transfer it to the GPU.
+        AVFrame *hw_frame = av_frame_alloc();
         if (!hw_frame) {
-            std::cerr << "Could not allocate hardware frame." << std::endl;
+            std::cerr << "Failed to allocate hardware frame." << std::endl;
             return false;
         }
 
-        if (av_hwframe_get_buffer(hw_frames_ctx, hw_frame, 0) < 0) {
-            std::cerr << "Could not get hardware frame buffer." << std::endl;
+        if (av_hwframe_get_buffer(codecContext->hw_frames_ctx, hw_frame, 0) < 0) {
+            std::cerr << "Failed to get buffer for hardware frame." << std::endl;
             av_frame_free(&hw_frame);
             return false;
         }
 
         if (av_hwframe_transfer_data(hw_frame, sw_frame, 0) < 0) {
-            std::cerr << "Could not transfer data to hardware frame." << std::endl;
+            std::cerr << "Failed to transfer data to hardware frame." << std::endl;
             av_frame_free(&hw_frame);
             return false;
         }
-
+        
         hw_frame->pts = sw_frame->pts;
 
-        if (avcodec_send_frame(codecContext, hw_frame) < 0) {
-            std::cerr << "Could not send frame to encoder." << std::endl;
-            av_frame_free(&hw_frame);
+        ret = avcodec_send_frame(codecContext, hw_frame);
+        av_frame_free(&hw_frame); // Free the container, the buffer is now owned by the codec
+        if (ret < 0) {
+            char err_buf[AV_ERROR_MAX_STRING_SIZE] = {0};
+            av_strerror(ret, err_buf, AV_ERROR_MAX_STRING_SIZE);
+            std::cerr << "Error sending a frame for encoding: " << err_buf << std::endl;
             return false;
         }
-
-        av_frame_free(&hw_frame);
     } else {
-        if (avcodec_send_frame(codecContext, nullptr) < 0) {
-            std::cerr << "Could not flush encoder." << std::endl;
+        // If sw_frame is null, it's a flush request. Send a null frame to the encoder.
+        ret = avcodec_send_frame(codecContext, NULL);
+        if (ret < 0) {
+            char err_buf[AV_ERROR_MAX_STRING_SIZE] = {0};
+            av_strerror(ret, err_buf, AV_ERROR_MAX_STRING_SIZE);
+            std::cerr << "Error sending a frame for encoding (flush): " << err_buf << std::endl;
             return false;
         }
     }
 
+    // Receive encoded packets
     AVPacket packet;
-    av_init_packet(&packet);
-
+    
     while (true) {
-        int ret = avcodec_receive_packet(codecContext, &packet);
+        av_init_packet(&packet);
+        packet.data = NULL;
+        packet.size = 0;
+
+        ret = avcodec_receive_packet(codecContext, &packet);
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
             break;
         } else if (ret < 0) {
-            std::cerr << "Error during encoding." << std::endl;
-            return false;
+            char err_buf[AV_ERROR_MAX_STRING_SIZE] = {0};
+            av_strerror(ret, err_buf, AV_ERROR_MAX_STRING_SIZE);
+            std::cerr << "Error during encoding: " << err_buf << std::endl;
+            break;
         }
 
         network.send_rtp_packet(packet.data, packet.size, packet.pts, false);

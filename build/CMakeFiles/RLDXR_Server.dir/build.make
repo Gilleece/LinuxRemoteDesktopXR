@@ -147,6 +147,7 @@ RLDXR_Server: /usr/lib/x86_64-linux-gnu/libavutil.so
 RLDXR_Server: /usr/lib/x86_64-linux-gnu/libswscale.so
 RLDXR_Server: /usr/lib/x86_64-linux-gnu/libva-drm.so
 RLDXR_Server: /usr/lib/x86_64-linux-gnu/libva.so
+RLDXR_Server: /usr/lib/x86_64-linux-gnu/libX11.so
 RLDXR_Server: CMakeFiles/RLDXR_Server.dir/link.txt
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/home/sean/DEV/LinuxRemoteDesktopXR/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Linking CXX executable RLDXR_Server"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/RLDXR_Server.dir/link.txt --verbose=$(VERBOSE)

@@ -114,3 +114,9 @@ AVFrame* Capture::capture_frame() {
 AVCodecContext* Capture::get_codec_context() {
     return codecContext;
 }
+
+AVBufferRef* Capture::get_hw_device_ctx() {
+    // This class doesn't manage the HW device context directly with x11grab.
+    // The encoder will create it. Returning nullptr.
+    return nullptr;
+}

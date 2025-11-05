@@ -12,27 +12,50 @@ Network::~Network() {
     if (sock >= 0) {
         close(sock);
     }
-    if (dest_addr) {
-        delete dest_addr;
-    }
 }
 
-bool Network::init(const char* dest_ip, int dest_port) {
+bool Network::init(int listen_port) {
     sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
         std::cerr << "Could not create socket." << std::endl;
         return false;
     }
 
-    dest_addr = new sockaddr_in();
-    dest_addr->sin_family = AF_INET;
-    dest_addr->sin_port = htons(dest_port);
-    if (inet_pton(AF_INET, dest_ip, &dest_addr->sin_addr) <= 0) {
-        std::cerr << "Invalid destination address." << std::endl;
+    struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    server_addr.sin_port = htons(listen_port);
+
+    if (bind(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        std::cerr << "Could not bind socket." << std::endl;
+        close(sock);
+        sock = -1;
         return false;
     }
 
     return true;
+}
+
+bool Network::wait_for_client() {
+    if (client_connected) {
+        return true;
+    }
+
+    std::cout << "Waiting for client connection..." << std::endl;
+    char buffer[10];
+    socklen_t client_len = sizeof(client_addr);
+    int n = recvfrom(sock, buffer, sizeof(buffer), 0, (struct sockaddr *)&client_addr, &client_len);
+
+    if (n > 0) {
+        char client_ip[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN);
+        std::cout << "Client connected from " << client_ip << ":" << ntohs(client_addr.sin_port) << std::endl;
+        client_connected = true;
+        return true;
+    }
+
+    return false;
 }
 
 void Network::create_rtp_header(uint8_t* buffer, uint16_t seq_num, uint32_t timestamp, bool marker) {
@@ -47,12 +70,14 @@ void Network::create_rtp_header(uint8_t* buffer, uint16_t seq_num, uint32_t time
 }
 
 void Network::send_rtp_packet(const uint8_t* nal_data, int nal_size, uint32_t timestamp, bool is_sps_pps) {
+    if (!client_connected) return;
+
     if (nal_size <= MTU_SIZE - 12) {
         // Single NAL unit packet
         std::vector<uint8_t> packet(12 + nal_size);
         create_rtp_header(packet.data(), sequence_number++, timestamp, true);
         memcpy(packet.data() + 12, nal_data, nal_size);
-        sendto(sock, packet.data(), packet.size(), 0, (struct sockaddr*)dest_addr, sizeof(*dest_addr));
+        sendto(sock, packet.data(), packet.size(), 0, (struct sockaddr*)&client_addr, sizeof(client_addr));
     } else {
         // FU-A fragmentation
         uint8_t nal_header = nal_data[0];
@@ -78,7 +103,7 @@ void Network::send_rtp_packet(const uint8_t* nal_data, int nal_size, uint32_t ti
             }
 
             memcpy(packet.data() + 14, nal_data, chunk_size);
-            sendto(sock, packet.data(), packet.size(), 0, (struct sockaddr*)dest_addr, sizeof(*dest_addr));
+            sendto(sock, packet.data(), packet.size(), 0, (struct sockaddr*)&client_addr, sizeof(client_addr));
 
             nal_data += chunk_size;
             nal_size -= chunk_size;

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RLDXR Client</string>
+    <style name="Theme.RLDXRClient" parent="Theme.AppCompat.Light.DarkActionBar">
+        
+    </style>
+</resources>

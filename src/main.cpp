@@ -18,23 +18,28 @@ int main() {
     AVCodecContext* capture_codec_ctx = capture.get_codec_context();
 
     Encoder encoder;
-    if (!encoder.init(capture_codec_ctx->width, capture_codec_ctx->height, 60, 1)) {
-        return -1;
+    if (!encoder.init(capture.get_codec_context()->width, capture.get_codec_context()->height, 30)) {
+        return 1;
     }
 
     Network network;
-    if (!network.init("127.0.0.1", 4242)) {
-        return -1;
+    if (!network.init(5004)) {
+        return 1;
+    }
+
+    if (!network.wait_for_client()) {
+        std::cerr << "Failed to get client connection." << std::endl;
+        return 1;
     }
 
     // Send SPS/PPS
-    AVCodecContext* encoder_ctx = encoder.get_codec_context();
-    if (encoder_ctx->extradata_size > 0) {
-        network.send_rtp_packet(encoder_ctx->extradata, encoder_ctx->extradata_size, 0, true);
+    AVPacket* sps_pps_packet = encoder.get_extradata_packet();
+    if (sps_pps_packet) {
+        network.send_rtp_packet(sps_pps_packet->data, sps_pps_packet->size, 0, true);
     }
 
     int frame_count = 0;
-    while (frame_count < 300) { // Capture 300 frames (5 seconds at 60fps)
+    while (true) { // Run indefinitely
         AVFrame* frame = capture.capture_frame();
         if (frame) {
             frame->pts = frame_count;

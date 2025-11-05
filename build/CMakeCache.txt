@@ -228,6 +228,15 @@ pkgcfg_lib_LIBVA_va:FILEPATH=/usr/lib/x86_64-linux-gnu/libva.so
 //Path to a library.
 pkgcfg_lib_LIBVA_va-drm:FILEPATH=/usr/lib/x86_64-linux-gnu/libva-drm.so
 
+//Path to a library.
+pkgcfg_lib_VA_va:FILEPATH=/usr/lib/x86_64-linux-gnu/libva.so
+
+//Path to a library.
+pkgcfg_lib_VA_va-drm:FILEPATH=/usr/lib/x86_64-linux-gnu/libva-drm.so
+
+//Path to a library.
+pkgcfg_lib_X11_X11:FILEPATH=/usr/lib/x86_64-linux-gnu/libX11.so
+
 
 ########################
 # INTERNAL cache entries
@@ -465,12 +474,92 @@ LIBVA_libva_VERSION:INTERNAL=1.20.0
 PKG_CONFIG_ARGN-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: PKG_CONFIG_EXECUTABLE
 PKG_CONFIG_EXECUTABLE-ADVANCED:INTERNAL=1
+VA_CFLAGS:INTERNAL=-I/usr/include
+VA_CFLAGS_I:INTERNAL=
+VA_CFLAGS_OTHER:INTERNAL=
+VA_FOUND:INTERNAL=1
+VA_INCLUDEDIR:INTERNAL=
+VA_INCLUDE_DIRS:INTERNAL=/usr/include
+VA_LDFLAGS:INTERNAL=-L/usr/lib/x86_64-linux-gnu;-lva-drm;-lva
+VA_LDFLAGS_OTHER:INTERNAL=
+VA_LIBDIR:INTERNAL=
+VA_LIBRARIES:INTERNAL=va-drm;va
+VA_LIBRARY_DIRS:INTERNAL=/usr/lib/x86_64-linux-gnu
+VA_LIBS:INTERNAL=
+VA_LIBS_L:INTERNAL=
+VA_LIBS_OTHER:INTERNAL=
+VA_LIBS_PATHS:INTERNAL=
+VA_MODULE_NAME:INTERNAL=
+VA_PREFIX:INTERNAL=
+VA_STATIC_CFLAGS:INTERNAL=-I/usr/include
+VA_STATIC_CFLAGS_I:INTERNAL=
+VA_STATIC_CFLAGS_OTHER:INTERNAL=
+VA_STATIC_INCLUDE_DIRS:INTERNAL=/usr/include
+VA_STATIC_LDFLAGS:INTERNAL=-L/usr/lib/x86_64-linux-gnu;-lva-drm;-lva
+VA_STATIC_LDFLAGS_OTHER:INTERNAL=
+VA_STATIC_LIBDIR:INTERNAL=
+VA_STATIC_LIBRARIES:INTERNAL=va-drm;va
+VA_STATIC_LIBRARY_DIRS:INTERNAL=/usr/lib/x86_64-linux-gnu
+VA_STATIC_LIBS:INTERNAL=
+VA_STATIC_LIBS_L:INTERNAL=
+VA_STATIC_LIBS_OTHER:INTERNAL=
+VA_STATIC_LIBS_PATHS:INTERNAL=
+VA_VERSION:INTERNAL=
+VA_libva-drm_INCLUDEDIR:INTERNAL=/usr/include
+VA_libva-drm_LIBDIR:INTERNAL=/usr/lib/x86_64-linux-gnu
+VA_libva-drm_MODULE_NAME:INTERNAL=libva-drm
+VA_libva-drm_PREFIX:INTERNAL=/usr
+VA_libva-drm_VERSION:INTERNAL=1.20.0
+VA_libva_INCLUDEDIR:INTERNAL=/usr/include
+VA_libva_LIBDIR:INTERNAL=/usr/lib/x86_64-linux-gnu
+VA_libva_MODULE_NAME:INTERNAL=libva
+VA_libva_PREFIX:INTERNAL=/usr
+VA_libva_VERSION:INTERNAL=1.20.0
+X11_CFLAGS:INTERNAL=-I/usr/include
+X11_CFLAGS_I:INTERNAL=
+X11_CFLAGS_OTHER:INTERNAL=
+X11_FOUND:INTERNAL=1
+X11_INCLUDEDIR:INTERNAL=/usr/include
+X11_INCLUDE_DIRS:INTERNAL=/usr/include
+X11_LDFLAGS:INTERNAL=-L/usr/lib/x86_64-linux-gnu;-lX11
+X11_LDFLAGS_OTHER:INTERNAL=
+X11_LIBDIR:INTERNAL=/usr/lib/x86_64-linux-gnu
+X11_LIBRARIES:INTERNAL=X11
+X11_LIBRARY_DIRS:INTERNAL=/usr/lib/x86_64-linux-gnu
+X11_LIBS:INTERNAL=
+X11_LIBS_L:INTERNAL=
+X11_LIBS_OTHER:INTERNAL=
+X11_LIBS_PATHS:INTERNAL=
+X11_MODULE_NAME:INTERNAL=x11
+X11_PREFIX:INTERNAL=/usr
+X11_STATIC_CFLAGS:INTERNAL=-I/usr/include
+X11_STATIC_CFLAGS_I:INTERNAL=
+X11_STATIC_CFLAGS_OTHER:INTERNAL=
+X11_STATIC_INCLUDE_DIRS:INTERNAL=/usr/include
+X11_STATIC_LDFLAGS:INTERNAL=-L/usr/lib/x86_64-linux-gnu;-lX11;-lpthread;-L/usr/lib/x86_64-linux-gnu;-lxcb;-L/usr/lib/x86_64-linux-gnu;-lXau;-lXdmcp
+X11_STATIC_LDFLAGS_OTHER:INTERNAL=
+X11_STATIC_LIBDIR:INTERNAL=
+X11_STATIC_LIBRARIES:INTERNAL=X11;pthread;xcb;Xau;Xdmcp
+X11_STATIC_LIBRARY_DIRS:INTERNAL=/usr/lib/x86_64-linux-gnu;/usr/lib/x86_64-linux-gnu;/usr/lib/x86_64-linux-gnu
+X11_STATIC_LIBS:INTERNAL=
+X11_STATIC_LIBS_L:INTERNAL=
+X11_STATIC_LIBS_OTHER:INTERNAL=
+X11_STATIC_LIBS_PATHS:INTERNAL=
+X11_VERSION:INTERNAL=1.8.7
+X11_x11_INCLUDEDIR:INTERNAL=
+X11_x11_LIBDIR:INTERNAL=
+X11_x11_PREFIX:INTERNAL=
+X11_x11_VERSION:INTERNAL=
 //linker supports push/pop state
 _CMAKE_LINKER_PUSHPOP_STATE_SUPPORTED:INTERNAL=TRUE
 __pkg_config_arguments_FFMPEG:INTERNAL=REQUIRED;IMPORTED_TARGET;libavcodec;libavformat;libavdevice;libavutil;libswscale
 __pkg_config_arguments_LIBVA:INTERNAL=REQUIRED;IMPORTED_TARGET;libva;libva-drm
+__pkg_config_arguments_VA:INTERNAL=REQUIRED;libva;libva-drm
+__pkg_config_arguments_X11:INTERNAL=REQUIRED;IMPORTED_TARGET;x11
 __pkg_config_checked_FFMPEG:INTERNAL=1
 __pkg_config_checked_LIBVA:INTERNAL=1
+__pkg_config_checked_VA:INTERNAL=1
+__pkg_config_checked_X11:INTERNAL=1
 //ADVANCED property for variable: pkgcfg_lib_FFMPEG_avcodec
 pkgcfg_lib_FFMPEG_avcodec-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: pkgcfg_lib_FFMPEG_avdevice
@@ -485,5 +574,11 @@ pkgcfg_lib_FFMPEG_swscale-ADVANCED:INTERNAL=1
 pkgcfg_lib_LIBVA_va-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: pkgcfg_lib_LIBVA_va-drm
 pkgcfg_lib_LIBVA_va-drm-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: pkgcfg_lib_VA_va
+pkgcfg_lib_VA_va-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: pkgcfg_lib_VA_va-drm
+pkgcfg_lib_VA_va-drm-ADVANCED:INTERNAL=1
+//ADVANCED property for variable: pkgcfg_lib_X11_X11
+pkgcfg_lib_X11_X11-ADVANCED:INTERNAL=1
 prefix_result:INTERNAL=/usr/lib/x86_64-linux-gnu
 

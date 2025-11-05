@@ -1,0 +1,18 @@
+[
+    {
+        "merged": "/home/sean/.gradle/daemon/8.2/com.rldxr.client.app-merged_res-28:/layout_activity_main.xml.flat",
+        "source": "/home/sean/.gradle/daemon/8.2/com.rldxr.client.app-main-30:/layout/activity_main.xml"
+    },
+    {
+        "merged": "com.rldxr.client.app-merged_res-28:/layout_activity_main.xml.flat",
+        "source": "com.rldxr.client.app-main-30:/layout/activity_main.xml"
+    },
+    {
+        "merged": "/home/sean/.gradle/daemon/8.2/com.rldxr.client.app-merged_res-28:/mipmap-anydpi-v26_ic_launcher_round.xml.flat",
+        "source": "/home/sean/.gradle/daemon/8.2/com.rldxr.client.app-main-30:/mipmap-anydpi-v26/ic_launcher_round.xml"
+    },
+    {
+        "merged": "/home/sean/.gradle/daemon/8.2/com.rldxr.client.app-merged_res-28:/mipmap-anydpi-v26_ic_launcher.xml.flat",
+        "source": "/home/sean/.gradle/daemon/8.2/com.rldxr.client.app-main-30:/mipmap-anydpi-v26/ic_launcher.xml"
+    }
+]
