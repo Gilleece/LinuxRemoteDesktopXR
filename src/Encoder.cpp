@@ -1,11 +1,5 @@
 #include "Encoder.h"
 #include <iostream>
-#include <libavutil/error.h> // For av_strerror
-#include <libavutil/opt.h> // For av_opt_set
-
-extern "C" {
-#include <libavutil/hwcontext_vaapi.h>
-}
 
 Encoder::Encoder() {}
 
@@ -38,6 +32,10 @@ bool Encoder::init(int width, int height, int framerate) {
     codecContext->gop_size = 10;
     codecContext->max_b_frames = 0;
     codecContext->pix_fmt = AV_PIX_FMT_VAAPI;
+
+    // Low latency flags
+    codecContext->flags |= AV_CODEC_FLAG_LOW_DELAY;
+    av_opt_set(codecContext->priv_data, "tune", "ultrafast", 0);
 
     // Set quality for CQP mode. This is the most direct way.
     codecContext->global_quality = 25;

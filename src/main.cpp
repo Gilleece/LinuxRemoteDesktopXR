@@ -18,7 +18,7 @@ int main() {
     AVCodecContext* capture_codec_ctx = capture.get_codec_context();
 
     Encoder encoder;
-    if (!encoder.init(capture.get_codec_context()->width, capture.get_codec_context()->height, 30)) {
+    if (!encoder.init(capture.get_codec_context()->width, capture.get_codec_context()->height, 60)) {
         return 1;
     }
 
