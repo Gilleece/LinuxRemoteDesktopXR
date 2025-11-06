@@ -1,10 +1,12 @@
 # Linux Remote Desktop XR
 Stream your PC desktop as a 2D app to your Meta Quest for easy multitasking.
 
-[!WARNING]
+<img src="assets/LRDXR_logo.png" alt="Linux Remote Desktop XR Logo" width="50%" />
 
-ALPHA RELEASE
-This project is in a very early alpha stage. It is currently built for a highly specific hardware and software combination. Please do not expect broad compatibility at this time.
+>[!WARNING]
+>
+>ALPHA RELEASE
+>This project is in a very early alpha stage. It is currently built for a highly specific hardware and software combination. Please do not expect broad compatibility at this time.
 
 ## Why This Project?
 The primary goal is to create a simple 2D streamer APK for the Meta Quest (and other Android devices).
