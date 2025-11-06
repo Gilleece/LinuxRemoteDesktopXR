@@ -23,6 +23,10 @@ bool Capture::init(const char* displayName, const char* framerate, const char* v
     AVDictionary* options = nullptr;
     av_dict_set(&options, "framerate", framerate, 0);
     av_dict_set(&options, "video_size", videoSize, 0);
+    av_dict_set(&options, "show_region", "0", 0);  // Disable region indicator for performance
+    av_dict_set(&options, "use_shm", "1", 0);      // Use shared memory for faster capture
+    av_dict_set(&options, "draw_mouse", "0", 0);   // Disable mouse in capture - handle separately
+    av_dict_set(&options, "probesize", "32M", 0);  // Increase probesize to fix warning
 
     if (avformat_open_input(&formatContext, displayName, const_cast<AVInputFormat*>(inputFormat), &options) != 0) {
         std::cerr << "Could not open input device." << std::endl;
@@ -90,16 +94,22 @@ AVFrame* Capture::capture_frame() {
             if (avcodec_send_packet(codecContext, &packet) == 0) {
                 int ret = avcodec_receive_frame(codecContext, frame);
                 if (ret == 0) {
-                    sws_ctx = sws_getContext(codecContext->width, codecContext->height, codecContext->pix_fmt,
-                                             codecContext->width, codecContext->height, AV_PIX_FMT_NV12,
-                                             SWS_BILINEAR, nullptr, nullptr, nullptr);
+                    // Initialize sws_ctx only once, not on every frame!
                     if (!sws_ctx) {
-                        std::cerr << "Could not initialize sws context" << std::endl;
-                        av_packet_unref(&packet);
-                        return nullptr;
+                        sws_ctx = sws_getContext(codecContext->width, codecContext->height, codecContext->pix_fmt,
+                                                 codecContext->width, codecContext->height, AV_PIX_FMT_NV12,
+                                                 SWS_FAST_BILINEAR, nullptr, nullptr, nullptr);  // Use faster algorithm
+                        if (!sws_ctx) {
+                            std::cerr << "Could not initialize sws context" << std::endl;
+                            av_packet_unref(&packet);
+                            return nullptr;
+                        }
                     }
                     sws_scale(sws_ctx, (const uint8_t* const*)frame->data, frame->linesize, 0, codecContext->height,
                               sw_frame->data, sw_frame->linesize);
+                    
+                    // Set proper PTS for frame timing
+                    sw_frame->pts = frame->pts;
                     
                     av_packet_unref(&packet);
                     return sw_frame;

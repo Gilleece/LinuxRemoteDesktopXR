@@ -29,18 +29,22 @@ bool Encoder::init(int width, int height, int framerate) {
     codecContext->height = height;
     codecContext->time_base = {1, framerate};
     codecContext->framerate = {framerate, 1};
-    codecContext->gop_size = 10;
-    codecContext->max_b_frames = 0;
+    codecContext->gop_size = 30;  // Keyframe every 0.5 seconds at 60fps for good balance
+    codecContext->max_b_frames = 0;  // No B-frames
     codecContext->pix_fmt = AV_PIX_FMT_VAAPI;
 
-    // Low latency flags
+    // Ultra-low latency flags
     codecContext->flags |= AV_CODEC_FLAG_LOW_DELAY;
-    av_opt_set(codecContext->priv_data, "tune", "ultrafast", 0);
+    codecContext->flags2 |= AV_CODEC_FLAG2_FAST;
+    
+    // VAAPI-specific low latency options (using correct VAAPI parameters)
+    av_opt_set(codecContext->priv_data, "quality", "3", 0);        // Valid range 0-7, 3 is good quality
+    av_opt_set(codecContext->priv_data, "low_power", "1", 0);      // Use low-power encoding for speed
+    av_opt_set(codecContext->priv_data, "async_depth", "1", 0);    // Minimize async queue
 
-    // Set quality for CQP mode. This is the most direct way.
-    codecContext->global_quality = 25;
-    // Ensure bitrate is 0 to signal quality-based RC, not bitrate-based.
-    codecContext->bit_rate = 0;
+    // Use CQP (Constant Quality Parameter) mode - the only mode supported by your VAAPI driver
+    codecContext->global_quality = 25;  // Quality level (lower = better quality)
+    codecContext->bit_rate = 0;         // Set to 0 to use CQP mode
     codecContext->rc_max_rate = 0;
     codecContext->rc_min_rate = 0;
     codecContext->rc_buffer_size = 0;
@@ -65,7 +69,7 @@ bool Encoder::init(int width, int height, int framerate) {
     frames_ctx->sw_format = AV_PIX_FMT_NV12;
     frames_ctx->width     = codecContext->width;
     frames_ctx->height    = codecContext->height;
-    frames_ctx->initial_pool_size = 20;
+    frames_ctx->initial_pool_size = 4;  // Minimal pool for low latency
     if (av_hwframe_ctx_init(hw_frames_ref) < 0) {
         std::cerr << "Failed to initialize VAAPI hardware frames context." << std::endl;
         av_buffer_unref(&hw_frames_ref);

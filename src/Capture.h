@@ -8,6 +8,8 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
+#include <chrono>
+
 class Capture {
 public:
     Capture();
@@ -25,6 +27,10 @@ private:
     AVFrame* sw_frame = nullptr;
     SwsContext* sws_ctx = nullptr;
     int videoStreamIndex = -1;
+    
+    // Performance tracking
+    std::chrono::high_resolution_clock::time_point last_frame_time;
+    int64_t frame_count = 0;
 };
 
 #endif // CAPTURE_H

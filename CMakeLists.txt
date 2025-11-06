@@ -4,7 +4,7 @@ project(RLDXR_Server CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_executable(RLDXR_Server src/main.cpp src/Capture.cpp src/Encoder.cpp src/Network.cpp)
+add_executable(RLDXR_Server src/main.cpp src/Capture.cpp src/Encoder.cpp src/Network.cpp src/MouseTracker.cpp)
 
 find_package(PkgConfig REQUIRED)
 
@@ -46,6 +46,7 @@ target_link_libraries(RLDXR_Server PRIVATE
     /usr/lib/x86_64-linux-gnu/libavcodec.so
     /usr/lib/x86_64-linux-gnu/libswscale.so
     /usr/lib/x86_64-linux-gnu/libavutil.so
+    X11
     pthread
     m
 )

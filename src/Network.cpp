@@ -110,3 +110,27 @@ void Network::send_rtp_packet(const uint8_t* nal_data, int nal_size, uint32_t ti
         }
     }
 }
+
+void Network::send_mouse_position(int x, int y) {
+    if (!client_connected) return;
+    
+    // Create a simple mouse position packet (8 bytes: 4 for x, 4 for y)
+    uint8_t mouse_packet[12];
+    mouse_packet[0] = 'M';  // Mouse packet identifier
+    mouse_packet[1] = 'O';
+    mouse_packet[2] = 'U';
+    mouse_packet[3] = 'S';
+    
+    // Pack mouse coordinates (little-endian)
+    mouse_packet[4] = x & 0xFF;
+    mouse_packet[5] = (x >> 8) & 0xFF;
+    mouse_packet[6] = (x >> 16) & 0xFF;
+    mouse_packet[7] = (x >> 24) & 0xFF;
+    
+    mouse_packet[8] = y & 0xFF;
+    mouse_packet[9] = (y >> 8) & 0xFF;
+    mouse_packet[10] = (y >> 16) & 0xFF;
+    mouse_packet[11] = (y >> 24) & 0xFF;
+    
+    sendto(sock, mouse_packet, 12, 0, (struct sockaddr*)&client_addr, sizeof(client_addr));
+}

@@ -24,6 +24,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
     private lateinit var connectButton: Button
     private lateinit var surfaceView: SurfaceView
     private lateinit var surfaceHolder: SurfaceHolder
+    private lateinit var cursorOverlay: CursorOverlayView
     private var mediaCodec: MediaCodec? = null
     private val udpPort = 4242
     private val TAG = "RLDXRClient"
@@ -38,6 +39,7 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         surfaceView = findViewById(R.id.surfaceView)
         connectButton = findViewById(R.id.connectButton)
         ipAddressEditText = findViewById(R.id.ipAddressEditText)
+        cursorOverlay = findViewById(R.id.cursorOverlay)
         surfaceHolder = surfaceView.holder
         surfaceHolder.addCallback(this)
 
@@ -71,7 +73,33 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
                 while (isActive) {
                     try {
                         socket.receive(packet)
-                        rtpDepacketizer.handleRtpPacket(packet.data, packet.length)
+                        
+                        // Check if it's a mouse position packet
+                        if (packet.length >= 12 && 
+                            packet.data[0] == 'M'.code.toByte() &&
+                            packet.data[1] == 'O'.code.toByte() &&
+                            packet.data[2] == 'U'.code.toByte() &&
+                            packet.data[3] == 'S'.code.toByte()) {
+                            
+                            // Parse mouse coordinates (little-endian)
+                            val mouseX = ((packet.data[7].toInt() and 0xFF) shl 24) or
+                                        ((packet.data[6].toInt() and 0xFF) shl 16) or
+                                        ((packet.data[5].toInt() and 0xFF) shl 8) or
+                                        (packet.data[4].toInt() and 0xFF)
+                            
+                            val mouseY = ((packet.data[11].toInt() and 0xFF) shl 24) or
+                                        ((packet.data[10].toInt() and 0xFF) shl 16) or
+                                        ((packet.data[9].toInt() and 0xFF) shl 8) or
+                                        (packet.data[8].toInt() and 0xFF)
+                            
+                            // Update cursor position on UI thread
+                            runOnUiThread {
+                                updateCursorPosition(mouseX, mouseY)
+                            }
+                        } else {
+                            // It's a video packet, process normally
+                            rtpDepacketizer.handleRtpPacket(packet.data, packet.length)
+                        }
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Error processing packet", e)
                     }
@@ -112,5 +140,24 @@ class MainActivity : AppCompatActivity(), SurfaceHolder.Callback {
         mediaCodec?.stop()
         mediaCodec?.release()
         mediaCodec = null
+    }
+    
+    private fun updateCursorPosition(serverX: Int, serverY: Int) {
+        // Scale cursor position to match current view size
+        // Server sends 1920x1080 coordinates, scale to actual view size
+        val viewWidth = cursorOverlay.width
+        val viewHeight = cursorOverlay.height
+        
+        if (viewWidth > 0 && viewHeight > 0) {
+            val scaleX = viewWidth / 1920f
+            val scaleY = viewHeight / 1080f
+            
+            val scaledX = serverX * scaleX
+            val scaledY = serverY * scaleY
+            
+            cursorOverlay.updateCursorPosition(scaledX, scaledY)
+            
+            Log.v(TAG, "Cursor: ($serverX,$serverY) -> ($scaledX,$scaledY)")
+        }
     }
 }
