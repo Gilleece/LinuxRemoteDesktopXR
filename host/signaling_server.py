@@ -1,0 +1,91 @@
+import argparse
+import asyncio
+import json
+import logging
+from aiohttp import web
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+class SignalingServer:
+    def __init__(self):
+        self.host_ws = None
+        self.client_ws = None
+
+    async def handle_websocket(self, request):
+        ws = web.WebSocketResponse()
+        await ws.prepare(request)
+
+        peer_type = "unknown"
+        
+        try:
+            async for msg in ws:
+                if msg.type == web.WSMsgType.TEXT:
+                    data = json.loads(msg.data)
+                    msg_type = data.get('type')
+                    
+                    if msg_type == 'register':
+                        role = data.get('role')
+                        if role == 'host':
+                            self.host_ws = ws
+                            peer_type = "host"
+                            logger.info("Host registered")
+                        elif role == 'client':
+                            self.client_ws = ws
+                            peer_type = "client"
+                            logger.info("Client registered")
+                            # Notify host that a client connected
+                            if self.host_ws:
+                                await self.host_ws.send_json({'type': 'client_connected'})
+                        
+                        await ws.send_json({'type': 'registered', 'role': role})
+
+                    elif msg_type in ['offer', 'answer', 'ice-candidate']:
+                        target_ws = self.client_ws if peer_type == 'host' else self.host_ws
+                        if target_ws:
+                            logger.info(f"Forwarding {msg_type} from {peer_type}")
+                            await target_ws.send_str(msg.data)
+                        else:
+                            logger.warning(f"Cannot forward {msg_type}: Target peer not connected")
+                    
+                    else:
+                        logger.warning(f"Unknown message type: {msg_type}")
+
+                elif msg.type == web.WSMsgType.ERROR:
+                    logger.error(f'Websocket connection closed with exception {ws.exception()}')
+
+        finally:
+            if peer_type == 'host':
+                self.host_ws = None
+                logger.info("Host disconnected")
+            elif peer_type == 'client':
+                self.client_ws = None
+                logger.info("Client disconnected")
+            
+        return ws
+
+async def main():
+    parser = argparse.ArgumentParser(description="WebRTC Signaling Server")
+    parser.add_argument('--port', type=int, default=8080, help="Port to listen on")
+    args = parser.parse_args()
+
+    server = SignalingServer()
+    app = web.Application()
+    app.router.add_get('/ws', server.handle_websocket)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', args.port)
+    await site.start()
+    
+    logger.info(f"Signaling server started on 0.0.0.0:{args.port}")
+    
+    # Keep the server running
+    await asyncio.Event().wait()
+
+if __name__ == '__main__':
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
