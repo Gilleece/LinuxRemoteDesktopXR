@@ -166,46 +166,50 @@ class WebRTCStreamer:
                 print(f"Sent cursor data: {x}, {y}")
 
     def build_pipeline(self):
-        # Pipeline: pipewiresrc ! vp8enc (Verify Source)
-        pipeline_str = (
-            "pipewiresrc ! "
-            "videoconvert ! "
-            "vp8enc ! "
-            "rtpvp8pay ! "
-            "webrtcbin name=sendrecv bundle-policy=max-bundle stun-server=stun://stun.l.google.com:19302"
-        )
-        
-        logger.info(f"Building pipeline: {pipeline_str}")
-        self.pipeline = Gst.parse_launch(pipeline_str)
-        self.webrtcbin = self.pipeline.get_by_name('sendrecv')
-        
+        self.pipeline = Gst.Pipeline.new("pipeline")
+
+        try:
+            ximagesrc = Gst.ElementFactory.make("ximagesrc", "ximagesrc0")
+            ximagesrc.set_property("use-damage", False) # Required for capturing the full screen
+
+            videoconvert = Gst.ElementFactory.make("videoconvert", "videoconvert0")
+            queue = Gst.ElementFactory.make("queue", "queue0")
+            vaapih264enc = Gst.ElementFactory.make("vaapih264enc", "vaapih264enc0")
+            rtph264pay = Gst.ElementFactory.make("rtph264pay", "rtph264pay0")
+            
+            self.webrtcbin = Gst.ElementFactory.make("webrtcbin", "sendrecv")
+            self.webrtcbin.set_property("bundle-policy", "max-bundle")
+            self.webrtcbin.set_property("stun-server", "stun://stun.l.google.com:19302")
+
+            for elem in [ximagesrc, videoconvert, queue, vaapih264enc, rtph264pay, self.webrtcbin]:
+                self.pipeline.add(elem)
+
+            if not ximagesrc.link(videoconvert):
+                logger.error("Failed to link ximagesrc to videoconvert")
+                return
+            if not videoconvert.link(queue):
+                logger.error("Failed to link videoconvert to queue")
+                return
+            if not queue.link(vaapih264enc):
+                logger.error("Failed to link queue to vaapih264enc")
+                return
+            if not vaapih264enc.link(rtph264pay):
+                logger.error("Failed to link vaapih264enc to rtph264pay")
+                return
+            rtph264pay.link(self.webrtcbin)
+
+        except (Exception, GLib.GError) as e:
+            logger.error(f"Failed to build pipeline: {e}")
+            sys.exit(1)
+
         self.webrtcbin.connect('on-ice-candidate', self.on_ice_candidate)
         self.webrtcbin.connect('on-negotiation-needed', self.on_negotiation_needed)
         self.webrtcbin.connect('on-data-channel', self.on_data_channel)
         
-        # Create data channel
         self.webrtcbin.emit('create-data-channel', 'cursor', None)
         
-        # Add probe to measure FPS
-        sink_pad = self.webrtcbin.get_static_pad('sink_0')
-        if not sink_pad:
-             # Try to find the sink pad connected to rtph264pay
-             rtppay = self.pipeline.get_by_name('rtph264pay0') # Gst.parse_launch might name it rtph264pay0
-             if not rtppay:
-                 # Iterate elements to find rtph264pay
-                 iter = self.pipeline.iterate_elements()
-                 while True:
-                     res, elem = iter.next()
-                     if res != Gst.IteratorResult.OK: break
-                     if "rtph264pay" in elem.get_name():
-                         rtppay = elem
-                         break
-             
-             if rtppay:
-                 src_pad = rtppay.get_static_pad('src')
-                 src_pad.add_probe(Gst.PadProbeType.BUFFER, self.fps_probe, None)
-             else:
-                 logger.warning("Could not find rtph264pay to attach FPS probe")
+        rtppay_src_pad = rtph264pay.get_static_pad('src')
+        rtppay_src_pad.add_probe(Gst.PadProbeType.BUFFER, self.fps_probe, None)
 
     def fps_probe(self, pad, info, user_data):
         self.frame_count += 1
