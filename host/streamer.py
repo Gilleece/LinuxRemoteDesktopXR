@@ -241,10 +241,21 @@ class WebRTCStreamer:
 
             videoconvert = Gst.ElementFactory.make("videoconvert", "videoconvert0")
             
-            # Add capsfilter to ensure compatible format for VAAPI (NV12 is standard)
+            # Add videorate to enforce stable framerate
+            videorate = Gst.ElementFactory.make("videorate", "videorate0")
+            
+            # Add capsfilter to ensure compatible format for VAAPI (NV12 is standard) and enforce 30fps
             capsfilter = Gst.ElementFactory.make("capsfilter", "capsfilter0")
-            caps = Gst.Caps.from_string("video/x-raw") 
+            caps = Gst.Caps.from_string("video/x-raw,framerate=30/1") 
             capsfilter.set_property("caps", caps)
+            
+            # Add vaapipostproc for hardware accelerated color conversion/scaling if possible
+            # This helps offload CPU from videoconvert
+            try:
+                vaapipostproc = Gst.ElementFactory.make("vaapipostproc", "vaapipostproc0")
+            except:
+                vaapipostproc = None
+                logger.warning("vaapipostproc not found, using software conversion only")
 
             # Configure queue to be leaky to prevent freezing/buffering
             queue = Gst.ElementFactory.make("queue", "queue0")
@@ -253,27 +264,44 @@ class WebRTCStreamer:
 
             # Configure encoder for better quality
             vaapih264enc = Gst.ElementFactory.make("vaapih264enc", "vaapih264enc0")
-            vaapih264enc.set_property("bitrate", 6000) # 6 Mbps - Lowered for stability
+            vaapih264enc.set_property("bitrate", 4000) # 4 Mbps - Lowered for stability
             # vaapih264enc.set_property("rate-control", 2) # CBR
-            vaapih264enc.set_property("keyframe-period", 30) # Keyframe every 30 frames (0.5 sec) for faster recovery
+            vaapih264enc.set_property("keyframe-period", 30) # Keyframe every 30 frames (1 sec)
             
             rtph264pay = Gst.ElementFactory.make("rtph264pay", "rtph264pay0")
+            rtph264pay.set_property("config-interval", 1) # Send SPS/PPS every keyframe
             
             self.webrtcbin = Gst.ElementFactory.make("webrtcbin", "sendrecv")
             self.webrtcbin.set_property("bundle-policy", "max-bundle")
             self.webrtcbin.set_property("stun-server", "stun://stun.l.google.com:19302")
+            
+            elements = [ximagesrc, videoconvert, videorate, capsfilter]
+            if vaapipostproc:
+                elements.append(vaapipostproc)
+            elements.extend([queue, vaapih264enc, rtph264pay, self.webrtcbin])
 
-            for elem in [ximagesrc, videoconvert, capsfilter, queue, vaapih264enc, rtph264pay, self.webrtcbin]:
+            for elem in elements:
                 self.pipeline.add(elem)
 
             if not ximagesrc.link(videoconvert):
                 logger.error("Failed to link ximagesrc to videoconvert")
                 return
-            if not videoconvert.link(capsfilter):
-                logger.error("Failed to link videoconvert to capsfilter")
+            if not videoconvert.link(videorate):
+                logger.error("Failed to link videoconvert to videorate")
                 return
-            if not capsfilter.link(queue):
-                logger.error("Failed to link capsfilter to queue")
+            if not videorate.link(capsfilter):
+                logger.error("Failed to link videorate to capsfilter")
+                return
+            
+            last_elem = capsfilter
+            if vaapipostproc:
+                if not capsfilter.link(vaapipostproc):
+                    logger.error("Failed to link capsfilter to vaapipostproc")
+                    return
+                last_elem = vaapipostproc
+            
+            if not last_elem.link(queue):
+                logger.error("Failed to link to queue")
                 return
             if not queue.link(vaapih264enc):
                 logger.error("Failed to link queue to vaapih264enc")

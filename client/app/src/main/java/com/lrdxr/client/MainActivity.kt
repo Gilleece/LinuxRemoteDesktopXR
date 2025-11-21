@@ -68,6 +68,25 @@ class MainActivity : AppCompatActivity() {
         surfaceView.setOnClickListener {
             showUi()
         }
+        
+        initWebRTCFactory()
+    }
+    
+    private fun initWebRTCFactory() {
+        eglBase = EglBase.create()
+        
+        val options = PeerConnectionFactory.InitializationOptions.builder(this)
+            .setEnableInternalTracer(true)
+            .createInitializationOptions()
+        PeerConnectionFactory.initialize(options)
+        
+        val videoEncoderFactory = DefaultVideoEncoderFactory(eglBase?.eglBaseContext, true, true)
+        val videoDecoderFactory = DefaultVideoDecoderFactory(eglBase?.eglBaseContext)
+
+        peerConnectionFactory = PeerConnectionFactory.builder()
+            .setVideoEncoderFactory(videoEncoderFactory)
+            .setVideoDecoderFactory(videoDecoderFactory)
+            .createPeerConnectionFactory()
     }
     
     private fun showUi() {
@@ -99,9 +118,8 @@ class MainActivity : AppCompatActivity() {
             ipInput.isEnabled = false
             resetHideTimer()
             
-            if (eglBase == null) {
-                initWebRTC()
-            }
+            // Always re-init surface view and peer connection
+            initWebRTC()
             connectSignaling()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start WebRTC", e)
@@ -116,14 +134,7 @@ class MainActivity : AppCompatActivity() {
         try {
             webSocketClient?.close()
             peerConnection.close()
-            // peerConnection.dispose() // Might crash if reused?
-            
-            // Re-init peer connection for next time? 
-            // Or just leave it closed and let initWebRTC handle it if eglBase is null?
-            // But eglBase is not null.
-            // Let's just recreate everything next time.
-            eglBase?.release()
-            eglBase = null
+            // Do not release eglBase or dispose factory as we reuse them
             
             runOnUiThread {
                 connectButton.visibility = View.VISIBLE
@@ -131,6 +142,7 @@ class MainActivity : AppCompatActivity() {
                 ipInput.isEnabled = true
                 cursorView.visibility = View.GONE
                 surfaceView.clearImage()
+                surfaceView.release() // Release surface view resources but keep eglBase
                 showUi()
                 hideUiHandler.removeCallbacks(hideUiRunnable)
             }
@@ -140,24 +152,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initWebRTC() {
-        eglBase = EglBase.create()
+        // eglBase is already created in initWebRTCFactory
         
         surfaceView.init(eglBase?.eglBaseContext, null)
         surfaceView.setMirror(false)
         surfaceView.setEnableHardwareScaler(true)
 
-        val options = PeerConnectionFactory.InitializationOptions.builder(this)
-            .setEnableInternalTracer(true)
-            .createInitializationOptions()
-        PeerConnectionFactory.initialize(options)
-
-        val videoEncoderFactory = DefaultVideoEncoderFactory(eglBase?.eglBaseContext, true, true)
-        val videoDecoderFactory = DefaultVideoDecoderFactory(eglBase?.eglBaseContext)
-
-        peerConnectionFactory = PeerConnectionFactory.builder()
-            .setVideoEncoderFactory(videoEncoderFactory)
-            .setVideoDecoderFactory(videoDecoderFactory)
-            .createPeerConnectionFactory()
+        // Factory is already initialized in onCreate
             
         val rtcConfig = PeerConnection.RTCConfiguration(
             listOf(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer())
