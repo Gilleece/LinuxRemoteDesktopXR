@@ -32,17 +32,20 @@ class MainActivity : AppCompatActivity() {
     private lateinit var inputLayout: View
     private lateinit var resolutionGroup: RadioGroup
     
-    private lateinit var peerConnectionFactory: PeerConnectionFactory
+    private lateinit var peerConnectionFactory: PeerConnectionFRadioGroupactory
     private lateinit var peerConnection: PeerConnection
     private var eglBase: EglBase? = null
     private var webSocketClient: WebSocketClient? = null
     
     private val hideUiHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    private val hideUiRunnable = Runnable {
+    private val hideUiRunnable = Runnable {RadioGroup
         inputLayout.animate().alpha(0f).setDuration(500).withEndAction {
             inputLayout.visibility = View.GONE
         }
     }
+
+    private var streamWidth = 1920
+    private var streamHeight = 1080
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -144,7 +147,19 @@ class MainActivity : AppCompatActivity() {
         
         surfaceView.init(eglBase?.eglBaseContext, null)
         surfaceView.setMirror(false)
-        surfaceView.setEnableHardwareScaler(true)
+        // Disable hardware scaler to attempt pixel-perfect rendering for high-res text.
+        // If performance is an issue, set this back to true.
+        surfaceView.setEnableHardwareScaler(false) 
+        surfaceView.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+
+        // Fix for resizing issues on Quest: Ensure scaling type is re-applied or view is updated
+        surfaceView.addOnLayoutChangeListener { v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+            if (left != oldLeft || top != oldTop || right != oldRight || bottom != oldBottom) {
+                Log.d(TAG, "SurfaceView resized: ${right - left}x${bottom - top}")
+                surfaceView.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
+                surfaceView.requestLayout()
+            }
+        }
 
         val options = PeerConnectionFactory.InitializationOptions.builder(this)
             .setEnableInternalTracer(true)
@@ -207,11 +222,30 @@ class MainActivity : AppCompatActivity() {
                             val normX = data.getFloat()
                             val normY = data.getFloat()
                             runOnUiThread {
-                                val viewWidth = surfaceView.width
-                                val viewHeight = surfaceView.height
+                                val viewWidth = surfaceView.width.toFloat()
+                                val viewHeight = surfaceView.height.toFloat()
                                 
-                                cursorView.x = normX * viewWidth
-                                cursorView.y = normY * viewHeight
+                                // Calculate actual video rect within the view (SCALE_ASPECT_FIT)
+                                val videoAspectRatio = streamWidth.toFloat() / streamHeight.toFloat()
+                                val viewAspectRatio = viewWidth / viewHeight
+                                
+                                var actualWidth = viewWidth
+                                var actualHeight = viewHeight
+                                var xOffset = 0f
+                                var yOffset = 0f
+                                
+                                if (viewAspectRatio > videoAspectRatio) {
+                                    // View is wider than video (black bars on left/right)
+                                    actualWidth = viewHeight * videoAspectRatio
+                                    xOffset = (viewWidth - actualWidth) / 2f
+                                } else {
+                                    // View is taller than video (black bars on top/bottom)
+                                    actualHeight = viewWidth / videoAspectRatio
+                                    yOffset = (viewHeight - actualHeight) / 2f
+                                }
+                                
+                                cursorView.x = xOffset + (normX * actualWidth)
+                                cursorView.y = yOffset + (normY * actualHeight)
                                 
                                 if (cursorView.visibility != View.VISIBLE) {
                                     cursorView.visibility = View.VISIBLE
@@ -248,6 +282,9 @@ class MainActivity : AppCompatActivity() {
                     R.id.res_1440p_uw -> { width = 3440; height = 1440 }
                     R.id.res_4k -> { width = 3840; height = 2160 }
                 }
+                
+                streamWidth = width
+                streamHeight = height
                 
                 val json = JSONObject()
                 json.put("type", "register")

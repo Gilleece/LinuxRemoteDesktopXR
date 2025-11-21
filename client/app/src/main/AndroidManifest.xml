@@ -27,7 +27,8 @@
             android:name=".MainActivity"
             android:exported="true"
             android:screenOrientation="landscape"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|uiMode|density|keyboardHidden"
+            android:resizeableActivity="true"
             android:theme="@style/Theme.LRDXRClient">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -36,6 +37,32 @@
             
             <!-- Quest specific intent filter for VR -->
             <meta-data android:name="com.oculus.vr.focusaware" android:value="true"/>
+            <meta-data android:name="com.oculus.supportedDevices" android:value="quest|quest2|quest3|questpro"/>
+            
+            <!-- Quest 2D Window Configuration -->
+            <meta-data android:name="com.oculus.vrshell.desktop_mode_dims" android:value="1920x1080"/>
+            <meta-data android:name="com.oculus.vrshell.desktop_dpi" android:value="240"/>
+            
+            <layout
+                android:defaultHeight="1080dp"
+                android:defaultWidth="1920dp"
+                android:gravity="center"
+                android:minHeight="600dp"
+                android:minWidth="800dp" />
+            
+            <!-- Quest 2D Window Configuration -->
+            <!-- Suggest a larger default window size (1920x1080) -->
+            <meta-data android:name="com.oculus.vrshell.desktop_mode_dims" android:value="1920x1080"/>
+            <!-- Increase density to avoid "crushed" UI and low-res rendering (default is often 160 or similar) -->
+            <meta-data android:name="com.oculus.vrshell.desktop_dpi" android:value="240"/>
+            
+            <!-- Standard Android Multi-Window Layout -->
+            <layout
+                android:defaultHeight="1080dp"
+                android:defaultWidth="1920dp"
+                android:gravity="center"
+                android:minHeight="600dp"
+                android:minWidth="800dp" />
         </activity>
     </application>
 

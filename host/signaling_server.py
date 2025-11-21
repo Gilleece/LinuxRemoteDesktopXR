@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import json
 import logging
+import socket
 from aiohttp import web
 
 # Configure logging
@@ -82,6 +83,18 @@ class SignalingServer:
             
         return ws
 
+def get_local_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # doesn't even have to be reachable
+        s.connect(('10.255.255.255', 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = '127.0.0.1'
+    finally:
+        s.close()
+    return IP
+
 async def main():
     parser = argparse.ArgumentParser(description="WebRTC Signaling Server")
     parser.add_argument('--port', type=int, default=8080, help="Port to listen on")
@@ -95,6 +108,11 @@ async def main():
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', args.port)
     await site.start()
+    
+    local_ip = get_local_ip()
+    print(f"\n{'='*40}")
+    print(f"Connect to: {local_ip}")
+    print(f"{'='*40}\n")
     
     logger.info(f"Signaling server started on 0.0.0.0:{args.port}")
     

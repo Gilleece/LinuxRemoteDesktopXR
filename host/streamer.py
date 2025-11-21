@@ -267,7 +267,7 @@ class WebRTCStreamer:
 
             # Configure encoder for better quality
             vaapih264enc = Gst.ElementFactory.make("vaapih264enc", "vaapih264enc0")
-            vaapih264enc.set_property("bitrate", 4000) # 4 Mbps - Lowered for stability
+            vaapih264enc.set_property("bitrate", 20000) # 20 Mbps for high quality
             # vaapih264enc.set_property("rate-control", 2) # CBR
             vaapih264enc.set_property("keyframe-period", 30) # Keyframe every 30 frames (1 sec)
             
