@@ -32,13 +32,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var inputLayout: View
     private lateinit var resolutionGroup: RadioGroup
     
-    private lateinit var peerConnectionFactory: PeerConnectionFRadioGroupactory
+    private lateinit var peerConnectionFactory: PeerConnectionFactory
     private lateinit var peerConnection: PeerConnection
     private var eglBase: EglBase? = null
     private var webSocketClient: WebSocketClient? = null
     
     private val hideUiHandler = android.os.Handler(android.os.Looper.getMainLooper())
-    private val hideUiRunnable = Runnable {RadioGroup
+    private val hideUiRunnable = Runnable {
         inputLayout.animate().alpha(0f).setDuration(500).withEndAction {
             inputLayout.visibility = View.GONE
         }

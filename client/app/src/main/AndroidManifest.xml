@@ -40,23 +40,12 @@
             <meta-data android:name="com.oculus.supportedDevices" android:value="quest|quest2|quest3|questpro"/>
             
             <!-- Quest 2D Window Configuration -->
-            <meta-data android:name="com.oculus.vrshell.desktop_mode_dims" android:value="1920x1080"/>
-            <meta-data android:name="com.oculus.vrshell.desktop_dpi" android:value="240"/>
+            <!-- Increase resolution to 2560x1440 for better clarity -->
+            <meta-data android:name="com.oculus.vrshell.desktop_mode_dims" android:value="2560x1440"/>
+            <!-- Increase DPI to 360 (xhdpi) to match the higher resolution -->
+            <meta-data android:name="com.oculus.vrshell.desktop_dpi" android:value="360"/>
+            <meta-data android:name="com.oculus.vrshell.free_form_window" android:value="true"/>
             
-            <layout
-                android:defaultHeight="1080dp"
-                android:defaultWidth="1920dp"
-                android:gravity="center"
-                android:minHeight="600dp"
-                android:minWidth="800dp" />
-            
-            <!-- Quest 2D Window Configuration -->
-            <!-- Suggest a larger default window size (1920x1080) -->
-            <meta-data android:name="com.oculus.vrshell.desktop_mode_dims" android:value="1920x1080"/>
-            <!-- Increase density to avoid "crushed" UI and low-res rendering (default is often 160 or similar) -->
-            <meta-data android:name="com.oculus.vrshell.desktop_dpi" android:value="240"/>
-            
-            <!-- Standard Android Multi-Window Layout -->
             <layout
                 android:defaultHeight="1080dp"
                 android:defaultWidth="1920dp"
