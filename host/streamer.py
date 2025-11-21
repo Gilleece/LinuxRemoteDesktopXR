@@ -13,7 +13,11 @@ import gi
 gi.require_version('Gst', '1.0')
 gi.require_version('GstWebRTC', '1.0')
 gi.require_version('GstSdp', '1.0')
-from gi.repository import Gst, GstWebRTC, GstSdp, GLib
+try:
+    gi.require_version('Gdk', '3.0')
+except ValueError:
+    pass # Might be already loaded or not needed if Gtk is used
+from gi.repository import Gst, GstWebRTC, GstSdp, GLib, Gdk
 
 from aiohttp import ClientSession
 
@@ -35,6 +39,14 @@ class WebRTCStreamer:
         self.data_channel = None
         self.mouse_listener = None
         self.cursor_packet_count = 0
+        
+        # Get screen resolution for normalization
+        display = Gdk.Display.get_default()
+        monitor = display.get_primary_monitor()
+        geometry = monitor.get_geometry()
+        self.screen_width = geometry.width
+        self.screen_height = geometry.height
+        logger.info(f"Screen resolution: {self.screen_width}x{self.screen_height}")
 
     def start_glib_loop(self):
         self.glib_loop.run()
@@ -153,8 +165,13 @@ class WebRTCStreamer:
 
     def on_mouse_move(self, x, y):
         if self.data_channel and self.data_channel.get_property('ready-state') == GstWebRTC.WebRTCDataChannelState.OPEN:
-            # Send x, y as 4-byte integers (big endian)
-            data = struct.pack('>II', int(x), int(y))
+            # Normalize coordinates
+            norm_x = x / self.screen_width
+            norm_y = y / self.screen_height
+            
+            # Send norm_x, norm_y as 4-byte floats (big endian)
+            data = struct.pack('>ff', float(norm_x), float(norm_y))
+            
             # GStreamer Data Channel send_string or send_data?
             # In python gi, it's often send_string for text, but for binary...
             # We need to create a GBytes
@@ -163,7 +180,8 @@ class WebRTCStreamer:
             
             self.cursor_packet_count += 1
             if self.cursor_packet_count % 60 == 0:
-                print(f"Sent cursor data: {x}, {y}")
+                # print(f"Sent cursor data: {x}, {y} ({norm_x:.2f}, {norm_y:.2f})")
+                pass
 
     def build_pipeline(self):
         self.pipeline = Gst.Pipeline.new("pipeline")
@@ -173,22 +191,37 @@ class WebRTCStreamer:
             ximagesrc.set_property("use-damage", False) # Required for capturing the full screen
 
             videoconvert = Gst.ElementFactory.make("videoconvert", "videoconvert0")
+            
+            # Add capsfilter to ensure compatible format for VAAPI (NV12 is standard)
+            capsfilter = Gst.ElementFactory.make("capsfilter", "capsfilter0")
+            caps = Gst.Caps.from_string("video/x-raw,format=NV12")
+            capsfilter.set_property("caps", caps)
+
             queue = Gst.ElementFactory.make("queue", "queue0")
+            
+            # Configure encoder for better quality
             vaapih264enc = Gst.ElementFactory.make("vaapih264enc", "vaapih264enc0")
+            vaapih264enc.set_property("bitrate", 8000) # 8 Mbps
+            # vaapih264enc.set_property("rate-control", 2) # CBR
+            vaapih264enc.set_property("keyframe-period", 60) # Keyframe every 60 frames (1 sec)
+            
             rtph264pay = Gst.ElementFactory.make("rtph264pay", "rtph264pay0")
             
             self.webrtcbin = Gst.ElementFactory.make("webrtcbin", "sendrecv")
             self.webrtcbin.set_property("bundle-policy", "max-bundle")
             self.webrtcbin.set_property("stun-server", "stun://stun.l.google.com:19302")
 
-            for elem in [ximagesrc, videoconvert, queue, vaapih264enc, rtph264pay, self.webrtcbin]:
+            for elem in [ximagesrc, videoconvert, capsfilter, queue, vaapih264enc, rtph264pay, self.webrtcbin]:
                 self.pipeline.add(elem)
 
             if not ximagesrc.link(videoconvert):
                 logger.error("Failed to link ximagesrc to videoconvert")
                 return
-            if not videoconvert.link(queue):
-                logger.error("Failed to link videoconvert to queue")
+            if not videoconvert.link(capsfilter):
+                logger.error("Failed to link videoconvert to capsfilter")
+                return
+            if not capsfilter.link(queue):
+                logger.error("Failed to link capsfilter to queue")
                 return
             if not queue.link(vaapih264enc):
                 logger.error("Failed to link queue to vaapih264enc")
@@ -206,7 +239,7 @@ class WebRTCStreamer:
         self.webrtcbin.connect('on-negotiation-needed', self.on_negotiation_needed)
         self.webrtcbin.connect('on-data-channel', self.on_data_channel)
         
-        self.webrtcbin.emit('create-data-channel', 'cursor', None)
+        # Moved create-data-channel to start() to ensure element is ready
         
         rtppay_src_pad = rtph264pay.get_static_pad('src')
         rtppay_src_pad.add_probe(Gst.PadProbeType.BUFFER, self.fps_probe, None)
@@ -244,6 +277,9 @@ class WebRTCStreamer:
         
         self.pipeline.set_state(Gst.State.PLAYING)
         logger.info("Pipeline started")
+        
+        # Create data channel after pipeline is playing to avoid assertion errors
+        self.webrtcbin.emit('create-data-channel', 'cursor', None)
         
         # Start GLib loop in a separate thread
         t = threading.Thread(target=self.start_glib_loop)

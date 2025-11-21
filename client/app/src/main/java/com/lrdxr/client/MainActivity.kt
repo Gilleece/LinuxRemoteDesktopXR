@@ -131,11 +131,18 @@ class MainActivity : AppCompatActivity() {
                         if (buffer != null && !buffer.binary) return // We expect binary
                         val data = buffer?.data ?: return
                         if (data.remaining() == 8) {
-                            val x = data.getInt()
-                            val y = data.getInt()
+                            val normX = data.getFloat()
+                            val normY = data.getFloat()
                             runOnUiThread {
-                                cursorView.x = x.toFloat()
-                                cursorView.y = y.toFloat()
+                                val viewWidth = surfaceView.width
+                                val viewHeight = surfaceView.height
+                                
+                                cursorView.x = normX * viewWidth
+                                cursorView.y = normY * viewHeight
+                                
+                                if (cursorView.visibility != View.VISIBLE) {
+                                    cursorView.visibility = View.VISIBLE
+                                }
                             }
                         }
                     }
