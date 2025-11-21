@@ -87,10 +87,12 @@ class WebRTCStreamer:
                 elif msg_type == 'registered':
                     logger.info("Registered as host.")
                 elif msg_type == 'client_connected':
-                    logger.info("Client connected. Switching resolution and creating offer...")
+                    width = data.get('width', 1920)
+                    height = data.get('height', 1080)
+                    logger.info(f"Client connected. Switching resolution to {width}x{height} and creating offer...")
                     
-                    # Switch resolution to 1440p
-                    if self.display_manager.create_and_set_mode(2560, 1440):
+                    # Switch resolution
+                    if self.display_manager.create_and_set_mode(width, height):
                         # Give X11 a moment to settle?
                         time.sleep(2) # Increased sleep time
                         self.update_screen_resolution()

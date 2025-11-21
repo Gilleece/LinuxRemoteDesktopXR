@@ -37,7 +37,13 @@ class SignalingServer:
                             logger.info("Client registered")
                             # Notify host that a client connected
                             if self.host_ws:
-                                await self.host_ws.send_json({'type': 'client_connected'})
+                                width = data.get('width', 1920)
+                                height = data.get('height', 1080)
+                                await self.host_ws.send_json({
+                                    'type': 'client_connected',
+                                    'width': width,
+                                    'height': height
+                                })
                         
                         await ws.send_json({'type': 'registered', 'role': role})
 

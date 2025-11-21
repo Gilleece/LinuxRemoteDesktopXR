@@ -7,6 +7,7 @@ import android.util.Log
 import android.widget.Toast
 import android.widget.Button
 import android.widget.EditText
+import android.widget.RadioGroup
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -29,6 +30,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var connectButton: Button
     private lateinit var disconnectButton: Button
     private lateinit var inputLayout: View
+    private lateinit var resolutionGroup: RadioGroup
     
     private lateinit var peerConnectionFactory: PeerConnectionFactory
     private lateinit var peerConnection: PeerConnection
@@ -52,6 +54,7 @@ class MainActivity : AppCompatActivity() {
         connectButton = findViewById(R.id.connect_button)
         disconnectButton = findViewById(R.id.disconnect_button)
         inputLayout = findViewById(R.id.input_layout)
+        resolutionGroup = findViewById(R.id.resolution_group)
         
         connectButton.setOnClickListener {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
@@ -97,6 +100,7 @@ class MainActivity : AppCompatActivity() {
             connectButton.visibility = View.GONE
             disconnectButton.visibility = View.VISIBLE
             ipInput.isEnabled = false
+            resolutionGroup.visibility = View.GONE
             resetHideTimer()
             
             // Always re-init surface view and peer connection
@@ -123,6 +127,7 @@ class MainActivity : AppCompatActivity() {
                 connectButton.visibility = View.VISIBLE
                 disconnectButton.visibility = View.GONE
                 ipInput.isEnabled = true
+                resolutionGroup.visibility = View.VISIBLE
                 cursorView.visibility = View.GONE
                 surfaceView.clearImage()
                 surfaceView.release()
@@ -232,7 +237,25 @@ class MainActivity : AppCompatActivity() {
             override fun onOpen(handshakedata: ServerHandshake?) {
                 Log.d(TAG, "WebSocket Connected")
                 runOnUiThread { Toast.makeText(this@MainActivity, "WebSocket Connected", Toast.LENGTH_SHORT).show() }
-                send("{\"type\": \"register\", \"role\": \"client\"}")
+                
+                val selectedId = resolutionGroup.checkedRadioButtonId
+                var width = 1920
+                var height = 1080
+                
+                when (selectedId) {
+                    R.id.res_1080p -> { width = 1920; height = 1080 }
+                    R.id.res_1440p -> { width = 2560; height = 1440 }
+                    R.id.res_1440p_uw -> { width = 3440; height = 1440 }
+                    R.id.res_4k -> { width = 3840; height = 2160 }
+                }
+                
+                val json = JSONObject()
+                json.put("type", "register")
+                json.put("role", "client")
+                json.put("width", width)
+                json.put("height", height)
+                
+                send(json.toString())
             }
 
             override fun onMessage(message: String?) {
