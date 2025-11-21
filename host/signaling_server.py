@@ -59,9 +59,20 @@ class SignalingServer:
             if peer_type == 'host':
                 self.host_ws = None
                 logger.info("Host disconnected")
+                if self.client_ws:
+                    try:
+                        await self.client_ws.send_json({'type': 'host_disconnected'})
+                    except Exception as e:
+                        logger.error(f"Failed to notify client of host disconnection: {e}")
+
             elif peer_type == 'client':
                 self.client_ws = None
                 logger.info("Client disconnected")
+                if self.host_ws:
+                    try:
+                        await self.host_ws.send_json({'type': 'client_disconnected'})
+                    except Exception as e:
+                        logger.error(f"Failed to notify host of client disconnection: {e}")
             
         return ws
 

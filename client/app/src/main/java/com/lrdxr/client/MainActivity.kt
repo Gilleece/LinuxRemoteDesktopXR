@@ -27,11 +27,20 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cursorView: View
     private lateinit var ipInput: EditText
     private lateinit var connectButton: Button
+    private lateinit var disconnectButton: Button
+    private lateinit var inputLayout: View
     
     private lateinit var peerConnectionFactory: PeerConnectionFactory
     private lateinit var peerConnection: PeerConnection
     private var eglBase: EglBase? = null
     private var webSocketClient: WebSocketClient? = null
+    
+    private val hideUiHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val hideUiRunnable = Runnable {
+        inputLayout.animate().alpha(0f).setDuration(500).withEndAction {
+            inputLayout.visibility = View.GONE
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,6 +50,8 @@ class MainActivity : AppCompatActivity() {
         cursorView = findViewById(R.id.cursor_view)
         ipInput = findViewById(R.id.ip_input)
         connectButton = findViewById(R.id.connect_button)
+        disconnectButton = findViewById(R.id.disconnect_button)
+        inputLayout = findViewById(R.id.input_layout)
         
         connectButton.setOnClickListener {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
@@ -48,6 +59,27 @@ class MainActivity : AppCompatActivity() {
             } else {
                 startWebRTC()
             }
+        }
+        
+        disconnectButton.setOnClickListener {
+            disconnect()
+        }
+        
+        surfaceView.setOnClickListener {
+            showUi()
+        }
+    }
+    
+    private fun showUi() {
+        inputLayout.visibility = View.VISIBLE
+        inputLayout.alpha = 1f
+        resetHideTimer()
+    }
+    
+    private fun resetHideTimer() {
+        hideUiHandler.removeCallbacks(hideUiRunnable)
+        if (disconnectButton.visibility == View.VISIBLE) {
+             hideUiHandler.postDelayed(hideUiRunnable, 3000)
         }
     }
 
@@ -62,6 +94,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun startWebRTC() {
         try {
+            connectButton.visibility = View.GONE
+            disconnectButton.visibility = View.VISIBLE
+            ipInput.isEnabled = false
+            resetHideTimer()
+            
             if (eglBase == null) {
                 initWebRTC()
             }
@@ -70,7 +107,35 @@ class MainActivity : AppCompatActivity() {
             Log.e(TAG, "Failed to start WebRTC", e)
             runOnUiThread {
                 Toast.makeText(this, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                disconnect()
             }
+        }
+    }
+    
+    private fun disconnect() {
+        try {
+            webSocketClient?.close()
+            peerConnection.close()
+            // peerConnection.dispose() // Might crash if reused?
+            
+            // Re-init peer connection for next time? 
+            // Or just leave it closed and let initWebRTC handle it if eglBase is null?
+            // But eglBase is not null.
+            // Let's just recreate everything next time.
+            eglBase?.release()
+            eglBase = null
+            
+            runOnUiThread {
+                connectButton.visibility = View.VISIBLE
+                disconnectButton.visibility = View.GONE
+                ipInput.isEnabled = true
+                cursorView.visibility = View.GONE
+                surfaceView.clearImage()
+                showUi()
+                hideUiHandler.removeCallbacks(hideUiRunnable)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error disconnecting", e)
         }
     }
 
@@ -103,7 +168,15 @@ class MainActivity : AppCompatActivity() {
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) { 
                 Log.d(TAG, "ICE Connection State: $state") 
                 if (state == PeerConnection.IceConnectionState.CONNECTED) {
-                    runOnUiThread { Toast.makeText(this@MainActivity, "ICE Connected!", Toast.LENGTH_SHORT).show() }
+                    runOnUiThread { 
+                        Toast.makeText(this@MainActivity, "ICE Connected!", Toast.LENGTH_SHORT).show()
+                        resetHideTimer()
+                    }
+                } else if (state == PeerConnection.IceConnectionState.DISCONNECTED || state == PeerConnection.IceConnectionState.FAILED) {
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "ICE Disconnected", Toast.LENGTH_SHORT).show()
+                        disconnect()
+                    }
                 }
             }
             override fun onIceConnectionReceivingChange(b: Boolean) {}

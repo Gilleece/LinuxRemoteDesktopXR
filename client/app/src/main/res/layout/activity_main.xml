@@ -39,6 +39,14 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Connect" />
+
+        <Button
+            android:id="@+id/disconnect_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Disconnect"
+            android:visibility="gone"
+            android:layout_marginStart="8dp"/>
     </LinearLayout>
 
     <View

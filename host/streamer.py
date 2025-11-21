@@ -20,6 +20,7 @@ except ValueError:
 from gi.repository import Gst, GstWebRTC, GstSdp, GLib, Gdk
 
 from aiohttp import ClientSession
+from display_manager import DisplayManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -39,8 +40,12 @@ class WebRTCStreamer:
         self.data_channel = None
         self.mouse_listener = None
         self.cursor_packet_count = 0
+        self.display_manager = DisplayManager()
         
         # Get screen resolution for normalization
+        self.update_screen_resolution()
+
+    def update_screen_resolution(self):
         display = Gdk.Display.get_default()
         monitor = display.get_primary_monitor()
         geometry = monitor.get_geometry()
@@ -80,9 +85,40 @@ class WebRTCStreamer:
                 elif msg_type == 'registered':
                     logger.info("Registered as host.")
                 elif msg_type == 'client_connected':
-                    logger.info("Client connected. Creating offer...")
+                    logger.info("Client connected. Switching resolution and creating offer...")
+                    
+                    # Switch resolution to 1440p
+                    if self.display_manager.create_and_set_mode(2560, 1440):
+                        # Give X11 a moment to settle?
+                        time.sleep(2) # Increased sleep time
+                        self.update_screen_resolution()
+                    
+                    # We might need to restart the pipeline or at least ximagesrc to pick up the new resolution?
+                    # ximagesrc usually adapts, but let's see.
+                    # If the pipeline was already running (it is, in PLAYING state), changing resolution might cause error.
+                    # We should probably pause/stop pipeline, change resolution, then restart/resume.
+                    
+                    self.pipeline.set_state(Gst.State.NULL)
+                    time.sleep(0.5)
+                    self.pipeline.set_state(Gst.State.PLAYING)
+                    
+                    # Re-create data channel since we restarted pipeline? 
+                    # Actually webrtcbin is reset too.
+                    # We need to wait for it to be ready again?
+                    # But we are about to create an offer.
+                    
+                    # Wait a bit for pipeline to start up
+                    time.sleep(1)
+                    
+                    # Re-create data channel
+                    self.webrtcbin.emit('create-data-channel', 'cursor', None)
+
                     promise = Gst.Promise.new_with_change_func(self.on_offer_created, None, None)
                     self.webrtcbin.emit('create-offer', None, promise)
+
+                elif msg_type == 'client_disconnected':
+                    logger.info("Client disconnected (signaling).")
+                    self.handle_client_disconnect()
 
     def on_offer_created(self, promise, *args):
         promise.wait()
@@ -147,6 +183,19 @@ class WebRTCStreamer:
             self.loop
         )
 
+    def on_ice_connection_state_notify(self, webrtcbin, pspec):
+        state = webrtcbin.get_property("ice-connection-state")
+        logger.info(f"ICE connection state changed to: {state}")
+        if state in [GstWebRTC.WebRTCICEConnectionState.FAILED, 
+                     GstWebRTC.WebRTCICEConnectionState.CLOSED,
+                     GstWebRTC.WebRTCICEConnectionState.DISCONNECTED]:
+             self.handle_client_disconnect()
+
+    def handle_client_disconnect(self):
+        logger.info("Client disconnected. Restoring resolution.")
+        self.display_manager.restore()
+        self.update_screen_resolution()
+
     def on_negotiation_needed(self, element):
         logger.info("Negotiation needed")
 
@@ -194,16 +243,19 @@ class WebRTCStreamer:
             
             # Add capsfilter to ensure compatible format for VAAPI (NV12 is standard)
             capsfilter = Gst.ElementFactory.make("capsfilter", "capsfilter0")
-            caps = Gst.Caps.from_string("video/x-raw,format=NV12")
+            caps = Gst.Caps.from_string("video/x-raw") 
             capsfilter.set_property("caps", caps)
 
+            # Configure queue to be leaky to prevent freezing/buffering
             queue = Gst.ElementFactory.make("queue", "queue0")
-            
+            queue.set_property("max-size-buffers", 1)
+            queue.set_property("leaky", 2) # 2 = downstream (drop new buffers if full)
+
             # Configure encoder for better quality
             vaapih264enc = Gst.ElementFactory.make("vaapih264enc", "vaapih264enc0")
-            vaapih264enc.set_property("bitrate", 8000) # 8 Mbps
+            vaapih264enc.set_property("bitrate", 6000) # 6 Mbps - Lowered for stability
             # vaapih264enc.set_property("rate-control", 2) # CBR
-            vaapih264enc.set_property("keyframe-period", 60) # Keyframe every 60 frames (1 sec)
+            vaapih264enc.set_property("keyframe-period", 30) # Keyframe every 30 frames (0.5 sec) for faster recovery
             
             rtph264pay = Gst.ElementFactory.make("rtph264pay", "rtph264pay0")
             
@@ -238,6 +290,7 @@ class WebRTCStreamer:
         self.webrtcbin.connect('on-ice-candidate', self.on_ice_candidate)
         self.webrtcbin.connect('on-negotiation-needed', self.on_negotiation_needed)
         self.webrtcbin.connect('on-data-channel', self.on_data_channel)
+        self.webrtcbin.connect('notify::ice-connection-state', self.on_ice_connection_state_notify)
         
         # Moved create-data-channel to start() to ensure element is ready
         
@@ -279,6 +332,11 @@ class WebRTCStreamer:
         logger.info("Pipeline started")
         
         # Create data channel after pipeline is playing to avoid assertion errors
+        # self.webrtcbin.emit('create-data-channel', 'cursor', None) 
+        # Defer data channel creation until we actually connect? 
+        # Or just create it here and hope it persists through restart? 
+        # If we restart pipeline in client_connected, this one is lost anyway.
+        # So let's just leave it here for initial state, but handle re-creation later.
         self.webrtcbin.emit('create-data-channel', 'cursor', None)
         
         # Start GLib loop in a separate thread
@@ -300,7 +358,10 @@ async def main():
     args = parser.parse_args()
 
     streamer = WebRTCStreamer(args.signaling)
-    await streamer.run()
+    try:
+        await streamer.run()
+    finally:
+        streamer.display_manager.restore()
 
 if __name__ == '__main__':
     try:
