@@ -37,38 +37,15 @@ class DisplayManager:
             self.original_mode = current_mode
             logger.info(f"Saved original mode: {self.original_mode} for {self.output_name}")
 
-        # Generate modeline
         try:
-            cvt_out = subprocess.check_output(["cvt", str(width), str(height), str(refresh_rate)]).decode("utf-8")
-            # Modeline "2560x1440_60.00"  312.25  2560 2752 3024 3488  1440 1443 1448 1493 -hsync +vsync
-            modeline_match = re.search(r'Modeline\s+"([^"]+)"\s+(.*)', cvt_out)
-            if not modeline_match:
-                logger.error("Could not parse cvt output")
-                return False
-            
-            mode_name = modeline_match.group(1)
-            mode_params = modeline_match.group(2)
-            self.created_mode_name = mode_name
-
-            # Check if mode already exists
-            xrandr_out = subprocess.check_output(["xrandr"]).decode("utf-8")
-            if mode_name not in xrandr_out:
-                # Create new mode
-                logger.info(f"Creating new mode: {mode_name}")
-                subprocess.check_call(["xrandr", "--newmode", mode_name] + mode_params.split())
-            
-            # Add mode to output
-            try:
-                subprocess.check_call(["xrandr", "--addmode", output_name, mode_name])
-            except subprocess.CalledProcessError:
-                pass # Might already be added
-
-            # Set mode
-            logger.info(f"Switching {output_name} to {mode_name}")
-            subprocess.check_call(["xrandr", "--output", output_name, "--mode", mode_name])
-            
-            # Update screen dimensions for mouse normalization
-            # We might need to update the streamer's knowledge of screen size
+            # Use --scale-from to create a virtual resolution
+            # This forces the framebuffer to the target size while keeping the monitor at its native resolution
+            logger.info(f"Setting virtual resolution {width}x{height} on {output_name} using scale-from")
+            subprocess.check_call([
+                "xrandr", 
+                "--output", output_name, 
+                "--scale-from", f"{width}x{height}"
+            ])
             return True
 
         except Exception as e:
@@ -76,20 +53,19 @@ class DisplayManager:
             return False
 
     def restore(self):
-        if self.output_name and self.original_mode:
+        if self.output_name:
             try:
-                logger.info(f"Restoring resolution to {self.original_mode} on {self.output_name}")
-                subprocess.check_call(["xrandr", "--output", self.output_name, "--mode", self.original_mode])
+                logger.info(f"Restoring display on {self.output_name}")
+                # Reset scale to 1x1
+                subprocess.check_call([
+                    "xrandr", 
+                    "--output", self.output_name, 
+                    "--scale", "1x1"
+                ])
                 
-                if self.created_mode_name:
-                    # Remove mode
-                    # Note: removing mode while it's in use (if restore failed) is bad, but we just switched away.
-                    try:
-                        subprocess.check_call(["xrandr", "--delmode", self.output_name, self.created_mode_name])
-                        subprocess.check_call(["xrandr", "--rmmode", self.created_mode_name])
-                    except Exception as e:
-                        logger.warning(f"Could not remove mode {self.created_mode_name}: {e}")
-                    
-                    self.created_mode_name = None
+                # Restore original mode if needed
+                if self.original_mode:
+                     subprocess.check_call(["xrandr", "--output", self.output_name, "--mode", self.original_mode])
+                     
             except Exception as e:
                 logger.error(f"Failed to restore resolution: {e}")
