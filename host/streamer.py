@@ -6,6 +6,7 @@ import sys
 import time
 import threading
 import struct
+import os
 
 from pynput import mouse
 
@@ -41,6 +42,7 @@ class WebRTCStreamer:
         self.mouse_listener = None
         self.cursor_packet_count = 0
         self.display_manager = DisplayManager()
+        self.running = True
         
         # Get screen resolution for normalization
         self.update_screen_resolution()
@@ -192,9 +194,8 @@ class WebRTCStreamer:
              self.handle_client_disconnect()
 
     def handle_client_disconnect(self):
-        logger.info("Client disconnected. Restoring resolution.")
-        self.display_manager.restore()
-        self.update_screen_resolution()
+        logger.info("Client disconnected. Stopping streamer to trigger restart.")
+        self.running = False
 
     def on_negotiation_needed(self, element):
         logger.info("Negotiation needed")
@@ -377,8 +378,8 @@ class WebRTCStreamer:
         await self.connect_signaling()
         
         # Keep running
-        while True:
-            await asyncio.sleep(1)
+        while self.running:
+            await asyncio.sleep(0.1)
 
 async def main():
     parser = argparse.ArgumentParser(description="WebRTC Host Streamer")
@@ -394,5 +395,10 @@ async def main():
 if __name__ == '__main__':
     try:
         asyncio.run(main())
+        # If we get here, main() finished normally (disconnect)
+        # Restart the process
+        logger.info("Restarting streamer process...")
+        time.sleep(1) # Brief pause
+        os.execv(sys.executable, [sys.executable] + sys.argv)
     except KeyboardInterrupt:
         pass
