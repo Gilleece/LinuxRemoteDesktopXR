@@ -37,21 +37,20 @@
             
             <!-- Quest specific intent filter for VR -->
             <meta-data android:name="com.oculus.vr.focusaware" android:value="true"/>
-            <meta-data android:name="com.oculus.supportedDevices" android:value="quest|quest2|quest3|questpro"/>
+            <meta-data android:name="com.oculus.supportedDevices" android:value="quest2|quest3|questpro"/> <!-- I don't know if this is the actually quest pro flag lol -->
             
             <!-- Quest 2D Window Configuration -->
             <!-- Increase resolution to 2560x1440 for better clarity -->
-            <meta-data android:name="com.oculus.vrshell.desktop_mode_dims" android:value="2560x1440"/>
-            <!-- Increase DPI to 360 (xhdpi) to match the higher resolution -->
-            <meta-data android:name="com.oculus.vrshell.desktop_dpi" android:value="360"/>
+            <meta-data android:name="com.oculus.vrshell.desktop_mode_dims" android:value="1280x720"/>
+            <meta-data android:name="com.oculus.vrshell.desktop_dpi" android:value="480"/>
             <meta-data android:name="com.oculus.vrshell.free_form_window" android:value="true"/>
             
             <layout
-                android:defaultHeight="1080dp"
-                android:defaultWidth="1920dp"
+                android:defaultHeight="720dp"
+                android:defaultWidth="1280dp"
                 android:gravity="center"
-                android:minHeight="600dp"
-                android:minWidth="800dp" />
+                android:minHeight="720dp"
+                android:minWidth="1280dp" />
         </activity>
     </application>
 

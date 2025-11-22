@@ -267,9 +267,9 @@ class WebRTCStreamer:
 
             # Configure encoder for better quality
             vaapih264enc = Gst.ElementFactory.make("vaapih264enc", "vaapih264enc0")
-            vaapih264enc.set_property("bitrate", 20000) # 20 Mbps for high quality
+            vaapih264enc.set_property("bitrate", 30000) # 30 Mbps for high quality
             # vaapih264enc.set_property("rate-control", 2) # CBR
-            vaapih264enc.set_property("keyframe-period", 30) # Keyframe every 30 frames (1 sec)
+            vaapih264enc.set_property("keyframe-period", 10) # Keyframe every 10 frames
             
             rtph264pay = Gst.ElementFactory.make("rtph264pay", "rtph264pay0")
             rtph264pay.set_property("config-interval", 1) # Send SPS/PPS every keyframe

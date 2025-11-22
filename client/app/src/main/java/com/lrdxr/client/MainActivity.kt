@@ -18,12 +18,12 @@ import org.json.JSONObject
 import org.webrtc.*
 import java.net.URI
 import java.nio.ByteBuffer
-import java.util.*
 
 class MainActivity : AppCompatActivity() {
 
     private val TAG = "WebRTC_Client"
     
+    // UI Elements
     private lateinit var surfaceView: SurfaceViewRenderer
     private lateinit var cursorView: View
     private lateinit var ipInput: EditText
@@ -32,11 +32,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var inputLayout: View
     private lateinit var resolutionGroup: RadioGroup
     
+    // WebRTC & Network
     private lateinit var peerConnectionFactory: PeerConnectionFactory
     private lateinit var peerConnection: PeerConnection
     private var eglBase: EglBase? = null
     private var webSocketClient: WebSocketClient? = null
     
+    // UI State & Logic
+    private var streamWidth = 1920
+    private var streamHeight = 1080
+    private var lastNormX = 0.5f
+    private var lastNormY = 0.5f
+
     private val hideUiHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val hideUiRunnable = Runnable {
         inputLayout.animate().alpha(0f).setDuration(500).withEndAction {
@@ -44,13 +51,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private var streamWidth = 1920
-    private var streamHeight = 1080
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // Initialize Views
         surfaceView = findViewById(R.id.surface_view)
         cursorView = findViewById(R.id.cursor_view)
         ipInput = findViewById(R.id.ip_input)
@@ -59,6 +64,7 @@ class MainActivity : AppCompatActivity() {
         inputLayout = findViewById(R.id.input_layout)
         resolutionGroup = findViewById(R.id.resolution_group)
         
+        // Button Listeners
         connectButton.setOnClickListener {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO), 1)
@@ -76,6 +82,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
+    // --- UI Hiding Logic ---
+
     private fun showUi() {
         inputLayout.visibility = View.VISIBLE
         inputLayout.alpha = 1f
@@ -98,15 +106,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // --- WebRTC Setup ---
+
     private fun startWebRTC() {
         try {
-            connectButton.visibility = View.GONE
-            disconnectButton.visibility = View.VISIBLE
-            ipInput.isEnabled = false
-            resolutionGroup.visibility = View.GONE
-            resetHideTimer()
+            updateUiState(connected = true)
             
-            // Always re-init surface view and peer connection
+            // Re-init WebRTC Stack
             initWebRTC()
             connectSignaling()
         } catch (e: Exception) {
@@ -127,11 +133,7 @@ class MainActivity : AppCompatActivity() {
             eglBase = null
             
             runOnUiThread {
-                connectButton.visibility = View.VISIBLE
-                disconnectButton.visibility = View.GONE
-                ipInput.isEnabled = true
-                resolutionGroup.visibility = View.VISIBLE
-                cursorView.visibility = View.GONE
+                updateUiState(connected = false)
                 surfaceView.clearImage()
                 surfaceView.release()
                 showUi()
@@ -142,22 +144,41 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun updateUiState(connected: Boolean) {
+        if (connected) {
+            connectButton.visibility = View.GONE
+            disconnectButton.visibility = View.VISIBLE
+            ipInput.isEnabled = false
+            resolutionGroup.visibility = View.GONE
+            resetHideTimer()
+        } else {
+            connectButton.visibility = View.VISIBLE
+            disconnectButton.visibility = View.GONE
+            ipInput.isEnabled = true
+            resolutionGroup.visibility = View.VISIBLE
+            cursorView.visibility = View.GONE
+        }
+    }
+
     private fun initWebRTC() {
         eglBase = EglBase.create()
         
         surfaceView.init(eglBase?.eglBaseContext, null)
         surfaceView.setMirror(false)
-        // Disable hardware scaler to attempt pixel-perfect rendering for high-res text.
-        // If performance is an issue, set this back to true.
-        surfaceView.setEnableHardwareScaler(false) 
+        
+        // CRITICAL FIX: Enable Hardware Scaler to allow smooth resizing on Quest.
+        // If false, resizing the window forces a full re-buffer which causes black screens/stutter.
+        surfaceView.setEnableHardwareScaler(true) 
+        
+        // Use ASPECT_FIT to ensure we see the whole desktop (with black bars if needed)
         surfaceView.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
 
-        // Fix for resizing issues on Quest: Ensure scaling type is re-applied or view is updated
+        // Resize Listener: Only recalculate cursor position, do not re-init renderer
         surfaceView.addOnLayoutChangeListener { v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
             if (left != oldLeft || top != oldTop || right != oldRight || bottom != oldBottom) {
-                Log.d(TAG, "SurfaceView resized: ${right - left}x${bottom - top}")
-                surfaceView.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FIT)
-                surfaceView.requestLayout()
+                // Log.d(TAG, "Window Resized: ${right-left}x${bottom-top}")
+                // Recalculate cursor immediately so it doesn't drift
+                updateCursorPosition()
             }
         }
 
@@ -179,7 +200,7 @@ class MainActivity : AppCompatActivity() {
         )
         
         peerConnection = peerConnectionFactory.createPeerConnection(rtcConfig, object : PeerConnection.Observer {
-            override fun onSignalingChange(state: PeerConnection.SignalingState?) { Log.d(TAG, "Signaling State: $state") }
+            override fun onSignalingChange(state: PeerConnection.SignalingState?) {}
             override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) { 
                 Log.d(TAG, "ICE Connection State: $state") 
                 if (state == PeerConnection.IceConnectionState.CONNECTED) {
@@ -187,9 +208,9 @@ class MainActivity : AppCompatActivity() {
                         Toast.makeText(this@MainActivity, "ICE Connected!", Toast.LENGTH_SHORT).show()
                         resetHideTimer()
                     }
-                } else if (state == PeerConnection.IceConnectionState.DISCONNECTED || state == PeerConnection.IceConnectionState.FAILED) {
+                } else if (state == PeerConnection.IceConnectionState.FAILED) {
                     runOnUiThread {
-                        Toast.makeText(this@MainActivity, "ICE Disconnected", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "ICE Failed", Toast.LENGTH_SHORT).show()
                         disconnect()
                     }
                 }
@@ -197,9 +218,7 @@ class MainActivity : AppCompatActivity() {
             override fun onIceConnectionReceivingChange(b: Boolean) {}
             override fun onIceGatheringChange(state: PeerConnection.IceGatheringState?) {}
             override fun onIceCandidate(candidate: IceCandidate?) {
-                if (candidate != null) {
-                    sendIceCandidate(candidate)
-                }
+                if (candidate != null) sendIceCandidate(candidate)
             }
             override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>?) {}
             override fun onAddStream(stream: MediaStream?) {
@@ -211,45 +230,17 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onRemoveStream(stream: MediaStream?) {}
             override fun onDataChannel(channel: DataChannel?) {
-                Log.d(TAG, "Data Channel received: ${channel?.label()}")
                 channel?.registerObserver(object : DataChannel.Observer {
                     override fun onBufferedAmountChange(l: Long) {}
-                    override fun onStateChange() { Log.d(TAG, "Data Channel State: ${channel.state()}") }
+                    override fun onStateChange() {}
                     override fun onMessage(buffer: DataChannel.Buffer?) {
-                        if (buffer != null && !buffer.binary) return // We expect binary
+                        if (buffer != null && !buffer.binary) return
                         val data = buffer?.data ?: return
                         if (data.remaining() == 8) {
                             val normX = data.getFloat()
                             val normY = data.getFloat()
                             runOnUiThread {
-                                val viewWidth = surfaceView.width.toFloat()
-                                val viewHeight = surfaceView.height.toFloat()
-                                
-                                // Calculate actual video rect within the view (SCALE_ASPECT_FIT)
-                                val videoAspectRatio = streamWidth.toFloat() / streamHeight.toFloat()
-                                val viewAspectRatio = viewWidth / viewHeight
-                                
-                                var actualWidth = viewWidth
-                                var actualHeight = viewHeight
-                                var xOffset = 0f
-                                var yOffset = 0f
-                                
-                                if (viewAspectRatio > videoAspectRatio) {
-                                    // View is wider than video (black bars on left/right)
-                                    actualWidth = viewHeight * videoAspectRatio
-                                    xOffset = (viewWidth - actualWidth) / 2f
-                                } else {
-                                    // View is taller than video (black bars on top/bottom)
-                                    actualHeight = viewWidth / videoAspectRatio
-                                    yOffset = (viewHeight - actualHeight) / 2f
-                                }
-                                
-                                cursorView.x = xOffset + (normX * actualWidth)
-                                cursorView.y = yOffset + (normY * actualHeight)
-                                
-                                if (cursorView.visibility != View.VISIBLE) {
-                                    cursorView.visibility = View.VISIBLE
-                                }
+                                updateCursorPosition(normX, normY)
                             }
                         }
                     }
@@ -260,18 +251,59 @@ class MainActivity : AppCompatActivity() {
         })!!
     }
 
+    // --- Cursor Logic (The Fix for Letterboxing) ---
+
+    private fun updateCursorPosition(normX: Float = lastNormX, normY: Float = lastNormY) {
+        // Store last known position for when we resize
+        lastNormX = normX
+        lastNormY = normY
+
+        val viewWidth = surfaceView.width.toFloat()
+        val viewHeight = surfaceView.height.toFloat()
+        
+        // Safety check to prevent divide by zero before layout is ready
+        if (viewWidth == 0f || viewHeight == 0f || streamWidth == 0 || streamHeight == 0) return
+
+        val videoAspectRatio = streamWidth.toFloat() / streamHeight.toFloat()
+        val viewAspectRatio = viewWidth / viewHeight
+        
+        var actualWidth = viewWidth
+        var actualHeight = viewHeight
+        var xOffset = 0f
+        var yOffset = 0f
+        
+        // Calculate the "Black Bars"
+        if (viewAspectRatio > videoAspectRatio) {
+            // Window is wider than video (Black bars on Left/Right)
+            actualWidth = viewHeight * videoAspectRatio
+            xOffset = (viewWidth - actualWidth) / 2f
+        } else {
+            // Window is taller than video (Black bars on Top/Bottom)
+            actualHeight = viewWidth / videoAspectRatio
+            yOffset = (viewHeight - actualHeight) / 2f
+        }
+        
+        // Map normalized coordinates (0.0 - 1.0) to the actual video rect
+        cursorView.x = xOffset + (normX * actualWidth)
+        cursorView.y = yOffset + (normY * actualHeight)
+        
+        if (cursorView.visibility != View.VISIBLE) {
+            cursorView.visibility = View.VISIBLE
+        }
+    }
+
+    // --- Signaling (WebSocket) ---
+
     private fun connectSignaling() {
         val ip = ipInput.text.toString()
         val url = "ws://$ip:8080/ws"
-        Log.d(TAG, "Connecting to $url")
-        runOnUiThread { Toast.makeText(this, "Connecting to $url", Toast.LENGTH_SHORT).show() }
-        
         val uri = URI(url)
+        
         webSocketClient = object : WebSocketClient(uri) {
             override fun onOpen(handshakedata: ServerHandshake?) {
                 Log.d(TAG, "WebSocket Connected")
-                runOnUiThread { Toast.makeText(this@MainActivity, "WebSocket Connected", Toast.LENGTH_SHORT).show() }
                 
+                // Determine resolution
                 val selectedId = resolutionGroup.checkedRadioButtonId
                 var width = 1920
                 var height = 1080
@@ -296,18 +328,15 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onMessage(message: String?) {
-                Log.d(TAG, "Received: $message")
                 handleMessage(message)
             }
 
             override fun onClose(code: Int, reason: String?, remote: Boolean) {
-                Log.d(TAG, "WebSocket Closed: $reason")
-                runOnUiThread { Toast.makeText(this@MainActivity, "WebSocket Closed: $reason", Toast.LENGTH_LONG).show() }
+                runOnUiThread { Toast.makeText(this@MainActivity, "WS Closed: $reason", Toast.LENGTH_SHORT).show() }
             }
 
             override fun onError(ex: Exception?) {
-                Log.e(TAG, "WebSocket Error", ex)
-                runOnUiThread { Toast.makeText(this@MainActivity, "WebSocket Error: ${ex?.message}", Toast.LENGTH_LONG).show() }
+                runOnUiThread { Toast.makeText(this@MainActivity, "WS Error", Toast.LENGTH_SHORT).show() }
             }
         }
         webSocketClient?.connect()
@@ -360,7 +389,7 @@ class MainActivity : AppCompatActivity() {
     open inner class SimpleSdpObserver : SdpObserver {
         override fun onCreateSuccess(desc: SessionDescription?) {}
         override fun onSetSuccess() {}
-        override fun onCreateFailure(s: String?) { Log.e("WebRTC_Client", "SDP Create Failure: $s") }
-        override fun onSetFailure(s: String?) { Log.e("WebRTC_Client", "SDP Set Failure: $s") }
+        override fun onCreateFailure(s: String?) { Log.e(TAG, "SDP Error: $s") }
+        override fun onSetFailure(s: String?) { Log.e(TAG, "SDP Error: $s") }
     }
 }
